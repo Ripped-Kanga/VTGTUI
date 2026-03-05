@@ -5,12 +5,14 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from textual import work
+from textual import on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, VerticalScroll
+from textual.screen import ModalScreen
 from textual.widgets import (
     Button,
+    Checkbox,
     Footer,
     Header,
     Input,
@@ -23,6 +25,7 @@ from textual.widgets import (
 
 from vtgtui.converter import (
     QUALITY_PRESETS,
+    QualityPreset,
     SUPPORTED_EXTENSIONS,
     convert_video_to_gif,
     get_video_info,
@@ -70,6 +73,136 @@ class DropZone(Static):
         event.stop()
 
 
+class CustomQualityScreen(ModalScreen[QualityPreset | None]):
+    """Modal screen for configuring custom quality settings."""
+
+    CSS = """
+    CustomQualityScreen {
+        align: center middle;
+    }
+    #custom-dialog {
+        width: 60;
+        height: auto;
+        max-height: 80%;
+        border: thick $accent;
+        background: $surface;
+        padding: 1 2;
+    }
+    #custom-dialog .field-row {
+        height: 3;
+        margin-bottom: 1;
+        layout: horizontal;
+    }
+    #custom-dialog .field-label {
+        width: 16;
+        height: 3;
+        content-align: left middle;
+        text-align: left;
+        padding: 0 1 0 0;
+    }
+    #custom-dialog .field-input {
+        width: 1fr;
+    }
+    #custom-title {
+        text-align: center;
+        text-style: bold;
+        margin-bottom: 1;
+        width: 100%;
+    }
+    #custom-buttons {
+        height: 3;
+        margin-top: 1;
+        layout: horizontal;
+        align: center middle;
+    }
+    #custom-buttons Button {
+        margin: 0 1;
+    }
+    #two-pass-row {
+        height: 3;
+        margin-bottom: 1;
+    }
+    """
+
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel"),
+    ]
+
+    def compose(self) -> ComposeResult:
+        with VerticalScroll(id="custom-dialog"):
+            yield Label("Custom Quality Settings", id="custom-title")
+
+            with Horizontal(classes="field-row"):
+                yield Label("FPS:", classes="field-label")
+                yield Input(value="20", id="custom-fps", classes="field-input")
+
+            with Horizontal(classes="field-row"):
+                yield Label("Max Width:", classes="field-label")
+                yield Input(
+                    placeholder="No limit",
+                    id="custom-max-width",
+                    classes="field-input",
+                )
+
+            with Horizontal(classes="field-row"):
+                yield Label("Colors (2-256):", classes="field-label")
+                yield Input(value="256", id="custom-colors", classes="field-input")
+
+            yield Checkbox("Two-pass (better quality, slower)", value=True, id="custom-two-pass")
+
+            with Horizontal(id="custom-buttons"):
+                yield Button("Apply", variant="primary", id="custom-apply")
+                yield Button("Cancel", variant="default", id="custom-cancel")
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "custom-cancel":
+            self.dismiss(None)
+            return
+
+        if event.button.id == "custom-apply":
+            # Validate and build preset
+            try:
+                fps_str = self.query_one("#custom-fps", Input).value.strip()
+                fps = int(fps_str) if fps_str else None
+                if fps is not None and fps < 1:
+                    raise ValueError("FPS must be at least 1")
+            except ValueError as e:
+                self.notify(f"Invalid FPS: {e}", severity="error")
+                return
+
+            try:
+                width_str = self.query_one("#custom-max-width", Input).value.strip()
+                max_width = int(width_str) if width_str else None
+                if max_width is not None and max_width < 1:
+                    raise ValueError("Width must be at least 1")
+            except ValueError as e:
+                self.notify(f"Invalid max width: {e}", severity="error")
+                return
+
+            try:
+                colors_str = self.query_one("#custom-colors", Input).value.strip()
+                colors = int(colors_str) if colors_str else 256
+                if colors < 2 or colors > 256:
+                    raise ValueError("Must be between 2 and 256")
+            except ValueError as e:
+                self.notify(f"Invalid colors: {e}", severity="error")
+                return
+
+            two_pass = self.query_one("#custom-two-pass", Checkbox).value
+
+            preset = QualityPreset(
+                name="Custom",
+                fps=fps,
+                max_width=max_width,
+                colors=colors,
+                two_pass=two_pass,
+            )
+            self.dismiss(preset)
+
+
 class VTGApp(App):
     """Video to GIF TUI Application."""
 
@@ -86,6 +219,7 @@ class VTGApp(App):
         super().__init__()
         self._converting = False
         self._cancelled = False
+        self._custom_preset: QualityPreset | None = None
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -127,7 +261,8 @@ class VTGApp(App):
             with Horizontal(id="quality-row"):
                 yield Label("Quality:", id="quality-label")
                 yield Select(
-                    [(p.name, key) for key, p in QUALITY_PRESETS.items()],
+                    [(p.name, key) for key, p in QUALITY_PRESETS.items()]
+                    + [("Custom", "custom")],
                     value="high",
                     id="quality-select",
                     allow_blank=False,
@@ -211,6 +346,25 @@ class VTGApp(App):
     def action_focus_input(self) -> None:
         self.query_one("#input-path", Input).focus()
 
+    @on(Select.Changed, "#quality-select")
+    def on_quality_changed(self, event: Select.Changed) -> None:
+        if event.value == "custom":
+            self.push_screen(CustomQualityScreen(), self._on_custom_quality_result)
+
+    def _on_custom_quality_result(self, preset: QualityPreset | None) -> None:
+        select = self.query_one("#quality-select", Select)
+        if preset is None:
+            # User cancelled — revert to previous non-custom value
+            select.value = "high"
+            return
+        self._custom_preset = preset
+        desc = (
+            f"Custom: {preset.fps or 'orig'}fps, "
+            f"{'no limit' if preset.max_width is None else str(preset.max_width) + 'px'}, "
+            f"{preset.colors} colors"
+        )
+        self.log_message(f"[bold]{desc}[/]")
+
     def action_cancel(self) -> None:
         if self._converting:
             self._cancelled = True
@@ -239,7 +393,13 @@ class VTGApp(App):
             output_path = str(Path(input_path).with_suffix(".gif"))
             self.query_one("#output-path", Input).value = output_path
 
-        quality = self.query_one("#quality-select", Select).value
+        quality_value = self.query_one("#quality-select", Select).value
+
+        if quality_value == "custom" and self._custom_preset is None:
+            self.log_message("[red]No custom preset configured. Select Custom again to configure.[/]")
+            return
+
+        quality = self._custom_preset if quality_value == "custom" else quality_value
 
         # Parse trim values
         start_time = None
@@ -270,7 +430,7 @@ class VTGApp(App):
         self,
         input_path: str,
         output_path: str,
-        quality: str,
+        quality: str | QualityPreset,
         start_time: float | None = None,
         end_time: float | None = None,
     ) -> None:
@@ -287,7 +447,7 @@ class VTGApp(App):
         self.call_from_thread(progress_bar.update, progress=0)
         self.call_from_thread(progress_label.update, "0%")
 
-        preset_name = QUALITY_PRESETS[quality].name
+        preset_name = quality.name if isinstance(quality, QualityPreset) else QUALITY_PRESETS[quality].name
         trim_info = ""
         if start_time is not None and start_time > 0:
             trim_info += f" from {start_time:.1f}s"
