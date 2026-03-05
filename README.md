@@ -1,6 +1,6 @@
 # VTGTUI
 
-A TUI application written in Python to convert video files to GIFs.
+VTGTUI (Video to Gif Terminal User Interface) A TUI application written in Python to convert video files to GIFs.
 
 ![Demonstration](docs/gifs/VTGTUI_Demonstration.gif)
 
