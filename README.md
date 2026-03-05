@@ -64,6 +64,22 @@ Set the **Start** and **End** time fields (in seconds) to convert only a portion
 
 `.mp4`, `.avi`, `.mkv`, `.mov`, `.webm`, `.wmv`, `.flv`, `.m4v`, `.mpeg`, `.mpg`, `.3gp`, `.ts`
 
+### Desktop Entry (Linux)
+
+Install a `.desktop` file so VTGTUI appears in your application launcher:
+
+```bash
+vtgtui --install-desktop
+```
+
+To remove it:
+
+```bash
+vtgtui --uninstall-desktop
+```
+
+The desktop file is installed to `~/.local/share/applications/vtgtui.desktop`.
+
 ## Dependencies
 
 All dependencies are installed automatically via pip/pipx:

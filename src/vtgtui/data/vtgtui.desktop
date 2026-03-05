@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=VTGTUI
+Comment=Video to GIF TUI converter
+Exec=vtgtui
+Icon=utilities-terminal
+Terminal=true
+Categories=AudioVideo;Video;Utility;
+Keywords=video;gif;convert;
