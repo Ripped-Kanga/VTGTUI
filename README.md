@@ -40,7 +40,8 @@ python -m vtgtui
 
 - **Drag & drop** a video file onto the terminal (supported terminals only)
 - **Type or paste** a file path into the input field
-- Select a **quality preset** and click **Convert**
+- **Trim** the video by setting start and end times (in seconds) before converting
+- Select a **quality preset** (or configure **Custom** settings) and click **Convert**
 - Press `Escape` to cancel an in-progress conversion
 - Press `q` to quit
 
@@ -48,10 +49,16 @@ python -m vtgtui
 
 | Preset | FPS | Max Width | Colors | Notes |
 |---|---|---|---|---|
-| Low | 10 | 320px | 64 | Smallest file size |
-| Medium | 15 | 480px | 128 | Balanced |
-| High | 20 | Original | 256 | Two-pass palette generation |
-| Uncompressed | Original | Original | 256 | Best quality, largest files |
+| Low | 10 | 480px | 128 | Smallest file size |
+| Medium | 15 | 640px | 192 | Two-pass, balanced |
+| High | 20 | 800px | 256 | Two-pass, best built-in preset |
+| Custom | Configurable | Configurable | 2–256 | Opens a settings dialog |
+
+The **Custom** option launches a modal where you can configure FPS, max width, color count, and whether to use two-pass palette generation.
+
+### Video Trimming
+
+Set the **Start** and **End** time fields (in seconds) to convert only a portion of the video. When a file is selected, these fields are automatically populated with the full video duration. Video metadata (duration, resolution, FPS) is displayed in the log on file selection.
 
 ### Supported Formats
 
