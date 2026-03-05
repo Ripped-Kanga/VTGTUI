@@ -25,6 +25,7 @@ from vtgtui.converter import (
     QUALITY_PRESETS,
     SUPPORTED_EXTENSIONS,
     convert_video_to_gif,
+    get_video_info,
     is_supported_format,
 )
 
@@ -107,6 +108,22 @@ class VTGApp(App):
                     classes="field-input",
                 )
 
+            with Horizontal(classes="field-row"):
+                yield Label("Start:", classes="field-label")
+                yield Input(
+                    placeholder="Start time in seconds (e.g. 0.0)",
+                    id="trim-start",
+                    classes="field-input",
+                )
+
+            with Horizontal(classes="field-row"):
+                yield Label("End:", classes="field-label")
+                yield Input(
+                    placeholder="End time in seconds (leave empty for full)",
+                    id="trim-end",
+                    classes="field-input",
+                )
+
             with Horizontal(id="quality-row"):
                 yield Label("Quality:", id="quality-label")
                 yield Select(
@@ -147,6 +164,19 @@ class VTGApp(App):
         drop_zone.add_class("has-file")
 
         self.log_message(f"Selected: [bold]{p.name}[/]")
+
+        # Probe video and show duration, pre-fill trim fields
+        try:
+            info = get_video_info(path)
+            mins, secs = divmod(info.duration, 60)
+            self.log_message(
+                f"  Duration: {int(mins)}m {secs:.1f}s | "
+                f"{info.width}x{info.height} @ {info.fps:.1f} fps"
+            )
+            self.query_one("#trim-start", Input).value = "0"
+            self.query_one("#trim-end", Input).value = f"{info.duration:.1f}"
+        except Exception:
+            pass
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         if event.input.id == "input-path" and event.value:
@@ -211,10 +241,39 @@ class VTGApp(App):
 
         quality = self.query_one("#quality-select", Select).value
 
-        self._run_conversion(input_path, output_path, quality)
+        # Parse trim values
+        start_time = None
+        end_time = None
+        start_str = self.query_one("#trim-start", Input).value.strip()
+        end_str = self.query_one("#trim-end", Input).value.strip()
+        try:
+            if start_str:
+                start_time = float(start_str)
+        except ValueError:
+            self.log_message("[red]Invalid start time. Use seconds (e.g. 1.5)[/]")
+            return
+        try:
+            if end_str:
+                end_time = float(end_str)
+        except ValueError:
+            self.log_message("[red]Invalid end time. Use seconds (e.g. 10.0)[/]")
+            return
+
+        if start_time is not None and end_time is not None and start_time >= end_time:
+            self.log_message("[red]Start time must be less than end time.[/]")
+            return
+
+        self._run_conversion(input_path, output_path, quality, start_time, end_time)
 
     @work(thread=True)
-    def _run_conversion(self, input_path: str, output_path: str, quality: str) -> None:
+    def _run_conversion(
+        self,
+        input_path: str,
+        output_path: str,
+        quality: str,
+        start_time: float | None = None,
+        end_time: float | None = None,
+    ) -> None:
         """Run the conversion in a background thread."""
         self._converting = True
         self._cancelled = False
@@ -229,9 +288,14 @@ class VTGApp(App):
         self.call_from_thread(progress_label.update, "0%")
 
         preset_name = QUALITY_PRESETS[quality].name
+        trim_info = ""
+        if start_time is not None and start_time > 0:
+            trim_info += f" from {start_time:.1f}s"
+        if end_time is not None and end_time > 0:
+            trim_info += f" to {end_time:.1f}s"
         self.call_from_thread(
             self.log_message,
-            f"Converting with [bold]{preset_name}[/] quality...",
+            f"Converting with [bold]{preset_name}[/] quality{trim_info}...",
         )
 
         def on_progress(pct: float) -> None:
@@ -247,6 +311,8 @@ class VTGApp(App):
                 input_path=input_path,
                 output_path=output_path,
                 quality=quality,
+                start_time=start_time,
+                end_time=end_time,
                 progress_callback=on_progress,
                 cancel_check=check_cancel,
             )

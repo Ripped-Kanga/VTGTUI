@@ -37,9 +37,9 @@ class QualityPreset:
 
 
 QUALITY_PRESETS: dict[str, QualityPreset] = {
-    "low": QualityPreset(name="Low", fps=10, max_width=320, colors=64, two_pass=False),
-    "medium": QualityPreset(name="Medium", fps=15, max_width=480, colors=128, two_pass=False),
-    "high": QualityPreset(name="High", fps=20, max_width=None, colors=256, two_pass=True),
+    "low": QualityPreset(name="Low", fps=10, max_width=480, colors=128, two_pass=False),
+    "medium": QualityPreset(name="Medium", fps=15, max_width=640, colors=192, two_pass=True),
+    "high": QualityPreset(name="High", fps=20, max_width=800, colors=256, two_pass=True),
     "uncompressed": QualityPreset(name="Uncompressed", fps=None, max_width=None, colors=256, two_pass=True),
 }
 
@@ -115,10 +115,33 @@ def _build_filter(preset: QualityPreset, video_info: VideoInfo) -> str:
     return ",".join(parts)
 
 
+def _build_trim_args(start_time: Optional[float], end_time: Optional[float]) -> list[str]:
+    """Build ffmpeg input args for trimming."""
+    args: list[str] = []
+    if start_time is not None and start_time > 0:
+        args.extend(["-ss", str(start_time)])
+    if end_time is not None and end_time > 0:
+        args.extend(["-to", str(end_time)])
+    return args
+
+
+def _effective_duration(
+    video_info: VideoInfo,
+    start_time: Optional[float],
+    end_time: Optional[float],
+) -> float:
+    """Calculate the effective duration after trimming for progress tracking."""
+    start = start_time if start_time and start_time > 0 else 0.0
+    end = end_time if end_time and end_time > 0 else video_info.duration
+    return max(end - start, 0.1)
+
+
 def convert_video_to_gif(
     input_path: str | Path,
     output_path: str | Path,
     quality: str = "high",
+    start_time: Optional[float] = None,
+    end_time: Optional[float] = None,
     progress_callback: Optional[Callable[[float], None]] = None,
     cancel_check: Optional[Callable[[], bool]] = None,
 ) -> None:
@@ -128,6 +151,8 @@ def convert_video_to_gif(
         input_path: Path to the input video file.
         output_path: Path for the output GIF file.
         quality: One of 'low', 'medium', 'high', 'uncompressed'.
+        start_time: Start time in seconds for trimming (None = from beginning).
+        end_time: End time in seconds for trimming (None = to end).
         progress_callback: Called with progress percentage (0-100).
         cancel_check: Called to check if conversion should be cancelled.
     """
@@ -138,16 +163,18 @@ def convert_video_to_gif(
 
     video_info = get_video_info(input_path)
     filter_str = _build_filter(preset, video_info)
+    trim_args = _build_trim_args(start_time, end_time)
+    duration = _effective_duration(video_info, start_time, end_time)
 
     if preset.two_pass:
         _convert_two_pass(
             ffmpeg, input_path, output_path, filter_str, preset,
-            video_info, progress_callback, cancel_check,
+            video_info, progress_callback, cancel_check, trim_args, duration,
         )
     else:
         _convert_single_pass(
             ffmpeg, input_path, output_path, filter_str, preset,
-            video_info, progress_callback, cancel_check,
+            video_info, progress_callback, cancel_check, trim_args, duration,
         )
 
 
@@ -160,6 +187,8 @@ def _convert_single_pass(
     video_info: VideoInfo,
     progress_callback: Optional[Callable[[float], None]],
     cancel_check: Optional[Callable[[], bool]],
+    trim_args: Optional[list[str]] = None,
+    duration: Optional[float] = None,
 ) -> None:
     """Single-pass conversion for lower quality presets."""
     split_filter = f"{filter_str},split[s0][s1];[s0]palettegen=max_colors={preset.colors}[p];[s1][p]paletteuse"
@@ -167,12 +196,13 @@ def _convert_single_pass(
         ffmpeg,
         "-y",
         "-progress", "pipe:1",
+        *(trim_args or []),
         "-i", str(input_path),
         "-lavfi", split_filter,
         "-loop", "0",
         str(output_path),
     ]
-    _run_ffmpeg(cmd, video_info.duration, progress_callback, cancel_check)
+    _run_ffmpeg(cmd, duration or video_info.duration, progress_callback, cancel_check)
 
 
 def _convert_two_pass(
@@ -184,8 +214,11 @@ def _convert_two_pass(
     video_info: VideoInfo,
     progress_callback: Optional[Callable[[float], None]],
     cancel_check: Optional[Callable[[], bool]],
+    trim_args: Optional[list[str]] = None,
+    duration: Optional[float] = None,
 ) -> None:
     """Two-pass conversion for higher quality presets using palettegen."""
+    effective_duration = duration or video_info.duration
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
         palette_path = tmp.name
 
@@ -195,6 +228,7 @@ def _convert_two_pass(
             ffmpeg,
             "-y",
             "-progress", "pipe:1",
+            *(trim_args or []),
             "-i", str(input_path),
             "-vf", f"{filter_str},palettegen=max_colors={preset.colors}:stats_mode=diff",
             str(palette_path),
@@ -204,7 +238,7 @@ def _convert_two_pass(
             if progress_callback:
                 progress_callback(pct * 0.4)  # Pass 1 is 40% of total
 
-        _run_ffmpeg(cmd_palette, video_info.duration, pass1_progress, cancel_check)
+        _run_ffmpeg(cmd_palette, effective_duration, pass1_progress, cancel_check)
 
         if cancel_check and cancel_check():
             return
@@ -215,6 +249,7 @@ def _convert_two_pass(
             ffmpeg,
             "-y",
             "-progress", "pipe:1",
+            *(trim_args or []),
             "-i", str(input_path),
             "-i", str(palette_path),
             "-lavfi", f"{filter_str}[x];[x][1:v]paletteuse=dither={dither}",
@@ -226,7 +261,7 @@ def _convert_two_pass(
             if progress_callback:
                 progress_callback(40 + pct * 0.6)  # Pass 2 is 60% of total
 
-        _run_ffmpeg(cmd_gif, video_info.duration, pass2_progress, cancel_check)
+        _run_ffmpeg(cmd_gif, effective_duration, pass2_progress, cancel_check)
     finally:
         if os.path.exists(palette_path):
             os.unlink(palette_path)
