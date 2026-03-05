@@ -2,6 +2,8 @@
 
 A TUI application written in Python to convert video files to GIFs.
 
+![Demonstration]('docs/gifs/VTGTUI_Demonstration.gif)
+
 ## Installation
 
 ```bash
