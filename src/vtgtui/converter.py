@@ -40,7 +40,6 @@ QUALITY_PRESETS: dict[str, QualityPreset] = {
     "low": QualityPreset(name="Low", fps=10, max_width=480, colors=128, two_pass=False),
     "medium": QualityPreset(name="Medium", fps=15, max_width=640, colors=192, two_pass=True),
     "high": QualityPreset(name="High", fps=20, max_width=800, colors=256, two_pass=True),
-    "uncompressed": QualityPreset(name="Uncompressed", fps=None, max_width=None, colors=256, two_pass=True),
 }
 
 
@@ -139,7 +138,7 @@ def _effective_duration(
 def convert_video_to_gif(
     input_path: str | Path,
     output_path: str | Path,
-    quality: str = "high",
+    quality: str | QualityPreset = "high",
     start_time: Optional[float] = None,
     end_time: Optional[float] = None,
     progress_callback: Optional[Callable[[float], None]] = None,
@@ -150,7 +149,7 @@ def convert_video_to_gif(
     Args:
         input_path: Path to the input video file.
         output_path: Path for the output GIF file.
-        quality: One of 'low', 'medium', 'high', 'uncompressed'.
+        quality: Preset name ('low', 'medium', 'high') or a QualityPreset.
         start_time: Start time in seconds for trimming (None = from beginning).
         end_time: End time in seconds for trimming (None = to end).
         progress_callback: Called with progress percentage (0-100).
@@ -159,7 +158,7 @@ def convert_video_to_gif(
     input_path = Path(input_path)
     output_path = Path(output_path)
     ffmpeg = get_ffmpeg_path()
-    preset = QUALITY_PRESETS[quality]
+    preset = quality if isinstance(quality, QualityPreset) else QUALITY_PRESETS[quality]
 
     video_info = get_video_info(input_path)
     filter_str = _build_filter(preset, video_info)
