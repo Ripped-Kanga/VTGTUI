@@ -262,7 +262,7 @@ class VTGApp(App):
                     self.log_message,
                     f"[green]Done![/] Saved to [bold]{output_path}[/] ({size_mb:.1f} MB)",
                 )
-                self.call_from_thread(on_progress, 100)
+                on_progress(100)
 
         except Exception as e:
             self.call_from_thread(
