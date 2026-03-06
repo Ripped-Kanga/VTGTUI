@@ -53,7 +53,8 @@ Screen {
 }
 
 #frame-preview {
-    height: 12;
+    height: 1fr;
+    min-height: 6;
     margin-bottom: 1;
     border: solid $panel;
     content-align: center middle;
@@ -102,7 +103,8 @@ Screen {
 }
 
 #log {
-    height: 1fr;
-    min-height: 5;
+    height: auto;
+    max-height: 8;
+    min-height: 4;
     border: solid $panel;
 }

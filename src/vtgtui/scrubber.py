@@ -266,7 +266,8 @@ class FramePreview(Widget):
 
     DEFAULT_CSS = """
     FramePreview {
-        height: 12;
+        height: 1fr;
+        min-height: 6;
     }
     """
 
