@@ -31,6 +31,7 @@ from vtgtui.converter import (
     get_video_info,
     is_supported_format,
 )
+from vtgtui.scrubber import FramePreview, TimelineScrubber
 
 
 def _parse_dropped_paths(text: str) -> list[str]:
@@ -220,6 +221,7 @@ class VTGApp(App):
         self._converting = False
         self._cancelled = False
         self._custom_preset: QualityPreset | None = None
+        self._syncing_scrubber = False
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -257,6 +259,9 @@ class VTGApp(App):
                     id="trim-end",
                     classes="field-input",
                 )
+
+            yield TimelineScrubber(id="scrubber")
+            yield FramePreview(id="frame-preview")
 
             with Horizontal(id="quality-row"):
                 yield Label("Quality:", id="quality-label")
@@ -310,6 +315,18 @@ class VTGApp(App):
             )
             self.query_one("#trim-start", Input).value = "0"
             self.query_one("#trim-end", Input).value = f"{info.duration:.1f}"
+
+            # Update scrubber
+            scrubber = self.query_one("#scrubber", TimelineScrubber)
+            scrubber.video_path = path
+            scrubber.duration = info.duration
+            scrubber.start_time = 0.0
+            scrubber.end_time = info.duration
+
+            # Set video path on frame preview
+            preview = self.query_one("#frame-preview", FramePreview)
+            preview.video_path = path
+            preview.update_preview(0.0, path)
         except Exception:
             pass
 
@@ -321,7 +338,62 @@ class VTGApp(App):
             else:
                 self.log_message(f"[red]File not found:[/] {path}")
 
+    @on(TimelineScrubber.StartChanged)
+    def _on_scrubber_start_changed(self, event: TimelineScrubber.StartChanged) -> None:
+        if self._syncing_scrubber:
+            return
+        self._syncing_scrubber = True
+        self.query_one("#trim-start", Input).value = f"{event.value:.1f}"
+        self._syncing_scrubber = False
+        # Update frame preview at start handle position
+        scrubber = self.query_one("#scrubber", TimelineScrubber)
+        if scrubber.video_path:
+            self.query_one("#frame-preview", FramePreview).update_preview(
+                event.value, scrubber.video_path
+            )
+
+    @on(TimelineScrubber.EndChanged)
+    def _on_scrubber_end_changed(self, event: TimelineScrubber.EndChanged) -> None:
+        if self._syncing_scrubber:
+            return
+        self._syncing_scrubber = True
+        self.query_one("#trim-end", Input).value = f"{event.value:.1f}"
+        self._syncing_scrubber = False
+        # Update frame preview at end handle position
+        scrubber = self.query_one("#scrubber", TimelineScrubber)
+        if scrubber.video_path:
+            self.query_one("#frame-preview", FramePreview).update_preview(
+                event.value, scrubber.video_path
+            )
+
+    @on(TimelineScrubber.CursorMoved)
+    def _on_scrubber_cursor_moved(self, event: TimelineScrubber.CursorMoved) -> None:
+        scrubber = self.query_one("#scrubber", TimelineScrubber)
+        if scrubber.video_path:
+            self.query_one("#frame-preview", FramePreview).update_preview(
+                event.value, scrubber.video_path
+            )
+
     def on_input_changed(self, event: Input.Changed) -> None:
+        if self._syncing_scrubber:
+            return
+
+        # Sync trim inputs to scrubber
+        if event.input.id in ("trim-start", "trim-end"):
+            scrubber = self.query_one("#scrubber", TimelineScrubber)
+            if scrubber.duration > 0:
+                try:
+                    val = float(event.value) if event.value.strip() else None
+                except ValueError:
+                    val = None
+                if val is not None:
+                    self._syncing_scrubber = True
+                    if event.input.id == "trim-start":
+                        scrubber.start_time = max(0.0, min(val, scrubber.end_time - 0.1))
+                    else:
+                        scrubber.end_time = max(scrubber.start_time + 0.1, min(val, scrubber.duration))
+                    self._syncing_scrubber = False
+
         if event.input.id == "input-path" and event.value:
             path = event.value.strip().strip("'\"")
             if os.path.isfile(path) and is_supported_format(path):

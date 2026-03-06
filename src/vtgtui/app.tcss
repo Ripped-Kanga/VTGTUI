@@ -42,6 +42,23 @@ Screen {
     width: 1fr;
 }
 
+#scrubber {
+    height: 3;
+    margin: 0 0 1 0;
+}
+
+#scrubber:focus {
+    border: solid $accent;
+    height: 5;
+}
+
+#frame-preview {
+    height: 12;
+    margin-bottom: 1;
+    border: solid $panel;
+    content-align: center middle;
+}
+
 #quality-row {
     height: 3;
     margin-bottom: 1;
