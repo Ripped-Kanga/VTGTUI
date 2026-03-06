@@ -305,7 +305,7 @@ class FramePreview(Widget):
             return
 
         self._loading = True
-        self.call_from_thread(self.refresh)
+        self.app.call_from_thread(self.refresh)
 
         try:
             # Use widget width for max_width, capped for performance
@@ -316,7 +316,7 @@ class FramePreview(Widget):
             self._rendered = Text("[No preview available]", style="dim italic")
         finally:
             self._loading = False
-            self.call_from_thread(self.refresh)
+            self.app.call_from_thread(self.refresh)
 
     def clear_preview(self) -> None:
         """Clear the preview and cache."""
