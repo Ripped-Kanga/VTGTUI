@@ -315,12 +315,12 @@ class FramePreview(Widget):
         self.app.call_from_thread(self.refresh)
 
         try:
-            # Half-block rendering: each terminal row shows 2 pixel rows
-            max_h = widget_h * 2
+            # Extract at full widget width for maximum horizontal resolution
             rgb, w, h = self._cache.get(
-                video_path, timestamp, max_width=widget_w, max_height=max_h
+                video_path, timestamp, max_width=widget_w,
             )
-            self._rendered = render_halfblock(rgb, w, h)
+            # Center-crop vertically to fit the widget height
+            self._rendered = render_halfblock(rgb, w, h, max_rows=widget_h)
         except Exception:
             self._rendered = Text("[No preview available]", style="dim italic")
         finally:
