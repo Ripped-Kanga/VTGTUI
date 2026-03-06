@@ -15,8 +15,16 @@ def extract_frame_raw(
     video_path: str | Path,
     timestamp: float,
     max_width: int = 80,
+    max_height: int | None = None,
 ) -> tuple[bytes, int, int]:
     """Extract a single frame as raw RGB24 bytes.
+
+    Args:
+        video_path: Path to the video file.
+        timestamp: Time in seconds to extract the frame at.
+        max_width: Maximum width in pixels (matches terminal columns).
+        max_height: Maximum height in pixels. For half-block rendering,
+            pass terminal_rows * 2 since each row displays 2 pixel rows.
 
     Returns (rgb_bytes, width, height).
     """
@@ -39,16 +47,18 @@ def extract_frame_raw(
     orig_w, orig_h = int(parts[0]), int(parts[1])
 
     # Calculate scaled dimensions preserving aspect ratio
-    if orig_w > max_width:
-        scale_w = max_width
-        scale_h = int(orig_h * (max_width / orig_w))
-    else:
-        scale_w = orig_w
-        scale_h = orig_h
+    # First scale to fit width
+    scale_w = min(orig_w, max_width)
+    scale_h = int(orig_h * (scale_w / orig_w))
 
-    # Ensure even dimensions for ffmpeg
-    scale_h = scale_h + (scale_h % 2)
-    scale_w = scale_w + (scale_w % 2)
+    # Then constrain by height if specified
+    if max_height and scale_h > max_height:
+        scale_h = max_height
+        scale_w = int(orig_w * (scale_h / orig_h))
+
+    # Ensure even dimensions for ffmpeg and minimum size
+    scale_w = max(scale_w + (scale_w % 2), 2)
+    scale_h = max(scale_h + (scale_h % 2), 2)
 
     cmd = [
         ffmpeg,
@@ -124,12 +134,16 @@ class ThumbnailCache:
         self._video_path: Optional[str] = None
 
     def get(
-        self, video_path: str | Path, timestamp: float, max_width: int = 80
+        self,
+        video_path: str | Path,
+        timestamp: float,
+        max_width: int = 80,
+        max_height: int | None = None,
     ) -> tuple[bytes, int, int]:
         """Get a frame, extracting and caching if needed."""
         vp = str(video_path)
 
-        # Clear cache if video changed
+        # Clear cache if video or dimensions changed
         if vp != self._video_path:
             self._cache.clear()
             self._video_path = vp
@@ -142,7 +156,9 @@ class ThumbnailCache:
             if len(self._cache) >= self._max:
                 oldest = next(iter(self._cache))
                 del self._cache[oldest]
-            self._cache[key] = extract_frame_raw(vp, timestamp, max_width)
+            self._cache[key] = extract_frame_raw(
+                vp, timestamp, max_width, max_height
+            )
 
         return self._cache[key]
 

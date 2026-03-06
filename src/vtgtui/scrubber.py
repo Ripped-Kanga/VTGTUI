@@ -308,9 +308,15 @@ class FramePreview(Widget):
         self.app.call_from_thread(self.refresh)
 
         try:
-            # Use widget width for max_width, capped for performance
-            max_w = min(self.size.width, 80) if self.size.width > 0 else 40
-            rgb, w, h = self._cache.get(video_path, timestamp, max_width=max_w)
+            # Match pixel dimensions to terminal cell dimensions
+            # Width = terminal columns (1 pixel per column)
+            # Height = terminal rows * 2 (half-block = 2 pixel rows per terminal row)
+            content_w = self.content_size.width if self.content_size.width > 0 else 80
+            content_h = self.content_size.height if self.content_size.height > 0 else 10
+            max_h = content_h * 2  # half-block doubles vertical resolution
+            rgb, w, h = self._cache.get(
+                video_path, timestamp, max_width=content_w, max_height=max_h
+            )
             self._rendered = render_halfblock(rgb, w, h)
         except Exception:
             self._rendered = Text("[No preview available]", style="dim italic")
