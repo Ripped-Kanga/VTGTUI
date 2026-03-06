@@ -129,7 +129,7 @@ class ThumbnailCache:
     """Simple cache for extracted video frames."""
 
     def __init__(self, max_entries: int = 20) -> None:
-        self._cache: dict[tuple[str, float], tuple[bytes, int, int]] = {}
+        self._cache: dict[tuple[str, float, int, int], tuple[bytes, int, int]] = {}
         self._max = max_entries
         self._video_path: Optional[str] = None
 
@@ -143,13 +143,13 @@ class ThumbnailCache:
         """Get a frame, extracting and caching if needed."""
         vp = str(video_path)
 
-        # Clear cache if video or dimensions changed
+        # Clear cache if video changed
         if vp != self._video_path:
             self._cache.clear()
             self._video_path = vp
 
-        # Round timestamp to nearest 0.1s to improve cache hits
-        key = (vp, round(timestamp, 1))
+        # Include dimensions in key so resizes get fresh frames
+        key = (vp, round(timestamp, 1), max_width, max_height or 0)
 
         if key not in self._cache:
             # Evict oldest if full

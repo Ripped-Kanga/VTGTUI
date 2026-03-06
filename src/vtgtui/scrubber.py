@@ -295,10 +295,16 @@ class FramePreview(Widget):
         self.preview_time = timestamp
         now = time.monotonic()
         self._last_request_time = now
-        self._extract_frame(timestamp, video_path, now)
+        # Capture dimensions on the main thread where layout is valid
+        w = self.size.width - 2 if self.size.width > 2 else 80  # subtract border
+        h = self.size.height - 2 if self.size.height > 2 else 10  # subtract border
+        self._extract_frame(timestamp, video_path, now, w, h)
 
     @work(thread=True)
-    def _extract_frame(self, timestamp: float, video_path: str, request_time: float) -> None:
+    def _extract_frame(
+        self, timestamp: float, video_path: str, request_time: float,
+        widget_w: int = 80, widget_h: int = 10,
+    ) -> None:
         """Extract and render a frame in a background thread."""
         # Debounce: skip if a newer request came in
         if request_time != self._last_request_time:
@@ -308,14 +314,10 @@ class FramePreview(Widget):
         self.app.call_from_thread(self.refresh)
 
         try:
-            # Match pixel dimensions to terminal cell dimensions
-            # Width = terminal columns (1 pixel per column)
-            # Height = terminal rows * 2 (half-block = 2 pixel rows per terminal row)
-            content_w = self.content_size.width if self.content_size.width > 0 else 80
-            content_h = self.content_size.height if self.content_size.height > 0 else 10
-            max_h = content_h * 2  # half-block doubles vertical resolution
+            # Half-block rendering: each terminal row shows 2 pixel rows
+            max_h = widget_h * 2
             rgb, w, h = self._cache.get(
-                video_path, timestamp, max_width=content_w, max_height=max_h
+                video_path, timestamp, max_width=widget_w, max_height=max_h
             )
             self._rendered = render_halfblock(rgb, w, h)
         except Exception:
