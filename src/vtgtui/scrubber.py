@@ -285,20 +285,14 @@ class FramePreview(Widget):
         self._last_request_time: float = 0.0
         self._use_kitty = detect_kitty_support()
         self._kitty_shown = False
+        self._pending_png: Optional[bytes] = None
 
     def render(self) -> Text:
-        if self._use_kitty:
-            # Render blank space; the Kitty image overlays on top
-            if self._loading:
-                return Text("Loading preview...", style="dim italic")
-            if self._kitty_shown:
-                return Text("")  # empty — image is drawn via escape sequences
-            if self.video_path is None:
-                return Text("No video loaded", style="dim")
-            return Text("Hover scrubber or move handles to preview", style="dim")
-        # Half-block fallback
         if self._loading:
             return Text("Loading preview...", style="dim italic")
+        if self._use_kitty and self._kitty_shown:
+            # Return empty text — the Kitty image overlays on a separate layer
+            return Text("")
         if self._rendered is not None:
             return self._rendered
         if self.video_path is None:
@@ -314,15 +308,12 @@ class FramePreview(Widget):
         # Capture dimensions on the main thread where layout is valid
         w = self.size.width - 2 if self.size.width > 2 else 80  # subtract border
         h = self.size.height - 2 if self.size.height > 2 else 10  # subtract border
-        # Capture screen position for Kitty protocol
-        region = self.content_region
-        self._extract_frame(timestamp, video_path, now, w, h, region.x, region.y)
+        self._extract_frame(timestamp, video_path, now, w, h)
 
     @work(thread=True)
     def _extract_frame(
         self, timestamp: float, video_path: str, request_time: float,
         widget_w: int = 80, widget_h: int = 10,
-        screen_x: int = 0, screen_y: int = 0,
     ) -> None:
         """Extract and render a frame in a background thread."""
         if request_time != self._last_request_time:
@@ -333,57 +324,56 @@ class FramePreview(Widget):
 
         try:
             if self._use_kitty:
-                self._extract_kitty(
-                    video_path, timestamp, widget_w, widget_h,
-                    screen_x, screen_y,
+                # Extract PNG at high resolution — terminal handles scaling
+                max_px_w = min(widget_w * 12, 1920)
+                max_px_h = min(widget_h * 24, 1080)
+                self._pending_png = self._cache.get_png(
+                    video_path, timestamp,
+                    max_width=max_px_w, max_height=max_px_h,
                 )
             else:
-                self._extract_halfblock(video_path, timestamp, widget_w, widget_h)
+                max_h = widget_h * 2
+                rgb, w, h = self._cache.get(
+                    video_path, timestamp,
+                    max_width=widget_w, max_height=max_h,
+                )
+                self._rendered = render_halfblock(rgb, w, h)
         except Exception:
             self._rendered = Text("[No preview available]", style="dim italic")
             self._kitty_shown = False
+            self._pending_png = None
         finally:
             self._loading = False
-            self.app.call_from_thread(self.refresh)
+            # Schedule display on main thread
+            self.app.call_from_thread(self._finish_render)
 
-    def _extract_kitty(
-        self, video_path: str, timestamp: float,
-        cols: int, rows: int, screen_x: int, screen_y: int,
-    ) -> None:
-        """Extract frame as PNG and display via Kitty graphics protocol."""
-        # Extract at high resolution — terminal handles the scaling
-        max_px_w = min(cols * 12, 1920)  # ~12px per cell typical
-        max_px_h = min(rows * 24, 1080)  # ~24px per cell typical
-        png_data = self._cache.get_png(
-            video_path, timestamp,
-            max_width=max_px_w, max_height=max_px_h,
-        )
+    def _finish_render(self) -> None:
+        """Called on main thread after frame extraction completes."""
+        self.refresh()
+        if self._use_kitty and self._pending_png:
+            # Delay image display until after Textual finishes its render pass
+            self.set_timer(0.05, self._display_kitty_image)
+
+    def _display_kitty_image(self) -> None:
+        """Display the pending Kitty protocol image after Textual has rendered."""
+        if not self._pending_png:
+            return
+        region = self.content_region
         show_image(
-            png_data,
-            x=screen_x, y=screen_y,
-            cols=cols, rows=rows,
+            self._pending_png,
+            x=region.x, y=region.y,
+            cols=region.width, rows=region.height,
             image_id=self.KITTY_IMAGE_ID,
         )
         self._kitty_shown = True
-        self._rendered = None
-
-    def _extract_halfblock(
-        self, video_path: str, timestamp: float,
-        widget_w: int, widget_h: int,
-    ) -> None:
-        """Extract frame and render as half-block characters (fallback)."""
-        max_h = widget_h * 2
-        rgb, w, h = self._cache.get(
-            video_path, timestamp,
-            max_width=widget_w, max_height=max_h,
-        )
-        self._rendered = render_halfblock(rgb, w, h)
+        self._pending_png = None
 
     def clear_preview(self) -> None:
         """Clear the preview and cache."""
         if self._use_kitty and self._kitty_shown:
             hide_image(self.KITTY_IMAGE_ID)
             self._kitty_shown = False
+        self._pending_png = None
         self._rendered = None
         self._cache.clear()
         self.video_path = None
