@@ -9,10 +9,9 @@ from typing import Optional
 from rich.text import Text
 from textual import work
 from textual.binding import Binding
-from textual.events import Click, MouseDown, MouseMove, MouseUp
+from textual.events import MouseDown, MouseMove, MouseUp
 from textual.message import Message
 from textual.reactive import reactive
-from textual.strip import Strip
 from textual.widget import Widget
 
 from vtgtui.thumbnails import ThumbnailCache, render_halfblock
@@ -72,9 +71,10 @@ class TimelineScrubber(Widget, can_focus=True):
         self._active_handle: str = "start"  # which handle keyboard controls
         self.video_path: Optional[str] = None
 
-    def _time_to_x(self, t: float) -> int:
+    def _time_to_x(self, t: float, w: int | None = None) -> int:
         """Convert a time value to an x-coordinate within the widget."""
-        w = self.size.width
+        if w is None:
+            w = self.size.width
         if w <= 2 or self.duration <= 0:
             return 0
         return int((t / self.duration) * (w - 1))
@@ -86,84 +86,64 @@ class TimelineScrubber(Widget, can_focus=True):
             return 0.0
         return max(0.0, min(self.duration, (x / (w - 1)) * self.duration))
 
-    def render_line(self, y: int) -> Strip:
-        """Render one of the 3 lines of the scrubber."""
+    def render(self) -> Text:
+        """Render the 3-line scrubber as a single Text object."""
         w = self.size.width
         if w < 4 or self.duration <= 0:
-            return Strip([Text(" " * w).render(self.app.console)])
+            return Text("No video loaded", style="dim")
 
-        if y == 0:
-            return self._render_time_labels(w)
-        elif y == 1:
-            return self._render_bar(w)
-        elif y == 2:
-            return self._render_handle_labels(w)
-        return Strip.blank(w)
+        text = Text()
 
-    def _render_time_labels(self, w: int) -> Strip:
-        """Line 0: time range labels."""
+        # Line 0: time range labels
         start_label = self._fmt_time(0.0)
         end_label = self._fmt_time(self.duration)
-        text = Text()
         text.append(start_label, style="dim")
         gap = w - len(start_label) - len(end_label)
         if gap > 0:
             text.append(" " * gap)
         text.append(end_label, style="dim")
-        return Strip([text.render(self.app.console)])
+        text.append("\n")
 
-    def _render_bar(self, w: int) -> Strip:
-        """Line 1: the actual bar with selected region highlighted."""
-        start_x = self._time_to_x(self.start_time)
-        end_x = self._time_to_x(self.end_time)
+        # Line 1: bar with handles
+        start_x = self._time_to_x(self.start_time, w)
+        end_x = self._time_to_x(self.end_time, w)
         focused = self.has_focus
 
-        text = Text()
         for x in range(w):
             if x == start_x:
                 style = "bold green" if (focused and self._active_handle == "start") else "green"
-                text.append("\u2590", style=style)  # Right half block as start handle
+                text.append("\u2590", style=style)
             elif x == end_x:
                 style = "bold red" if (focused and self._active_handle == "end") else "red"
-                text.append("\u258c", style=style)  # Left half block as end handle
+                text.append("\u258c", style=style)
             elif start_x < x < end_x:
-                text.append("\u2593", style="green")  # Dark shade - selected
+                text.append("\u2593", style="green")
             else:
-                text.append("\u2591", style="dim")  # Light shade - unselected
+                text.append("\u2591", style="dim")
+        text.append("\n")
 
-        return Strip([text.render(self.app.console)])
-
-    def _render_handle_labels(self, w: int) -> Strip:
-        """Line 2: labels under the handles showing their time values."""
-        start_x = self._time_to_x(self.start_time)
-        end_x = self._time_to_x(self.end_time)
-
-        start_label = f"\u25b2 {self._fmt_time(self.start_time)}"
-        end_label = f"\u25b2 {self._fmt_time(self.end_time)}"
-
-        # Build a character buffer
+        # Line 2: handle time labels
+        start_lbl = f"\u25b2 {self._fmt_time(self.start_time)}"
+        end_lbl = f"\u25b2 {self._fmt_time(self.end_time)}"
         buf = [" "] * w
         styles: dict[int, str] = {}
 
-        # Place start label
-        for i, ch in enumerate(start_label):
+        for i, ch in enumerate(start_lbl):
             pos = start_x + i
             if 0 <= pos < w:
                 buf[pos] = ch
                 styles[pos] = "green"
 
-        # Place end label (may overlap - end wins)
-        for i, ch in enumerate(end_label):
+        for i, ch in enumerate(end_lbl):
             pos = end_x + i
             if 0 <= pos < w:
                 buf[pos] = ch
                 styles[pos] = "red"
 
-        text = Text()
         for i, ch in enumerate(buf):
             text.append(ch, style=styles.get(i, "dim"))
 
-        return Strip([text.render(self.app.console)])
+        return text
 
     @staticmethod
     def _fmt_time(t: float) -> str:
