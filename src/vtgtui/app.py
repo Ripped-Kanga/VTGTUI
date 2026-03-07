@@ -55,6 +55,24 @@ def _parse_dropped_paths(text: str) -> list[str]:
     return paths
 
 
+class _FileDropInput(Input):
+    """Input that intercepts paste events containing file paths.
+
+    When a video file path is pasted (via drag-and-drop or clipboard),
+    it redirects to set_input_file instead of inserting into this field.
+    """
+
+    def _on_paste(self, event: events.Paste) -> None:
+        paths = _parse_dropped_paths(event.text)
+        video_paths = [p for p in paths if is_supported_format(p)]
+        if video_paths:
+            self.app.set_input_file(video_paths[0])
+            event.stop()
+            return
+        # Not a file drop — let the default Input paste handler run
+        super()._on_paste(event)
+
+
 class DropZone(Static):
     """A zone that accepts drag-and-dropped files via terminal paste events."""
 
@@ -64,7 +82,7 @@ class DropZone(Static):
             id="drop-zone",
         )
 
-    def _on_paste(self, event) -> None:
+    def _on_paste(self, event: events.Paste) -> None:
         """Handle paste events (file drag-and-drop in supported terminals)."""
         paths = _parse_dropped_paths(event.text)
         video_paths = [p for p in paths if is_supported_format(p)]
@@ -232,7 +250,7 @@ class VTGApp(App):
 
             with Horizontal(classes="field-row"):
                 yield Label("Input:", classes="field-label")
-                yield Input(
+                yield _FileDropInput(
                     placeholder="Path to video file...",
                     id="input-path",
                     classes="field-input",
@@ -240,7 +258,7 @@ class VTGApp(App):
 
             with Horizontal(classes="field-row"):
                 yield Label("Output:", classes="field-label")
-                yield Input(
+                yield _FileDropInput(
                     placeholder="Output GIF path (auto-generated if empty)",
                     id="output-path",
                     classes="field-input",
@@ -248,7 +266,7 @@ class VTGApp(App):
 
             with Horizontal(classes="field-row"):
                 yield Label("Start:", classes="field-label")
-                yield Input(
+                yield _FileDropInput(
                     placeholder="Start time in seconds (e.g. 0.0)",
                     id="trim-start",
                     classes="field-input",
@@ -256,7 +274,7 @@ class VTGApp(App):
 
             with Horizontal(classes="field-row"):
                 yield Label("End:", classes="field-label")
-                yield Input(
+                yield _FileDropInput(
                     placeholder="End time in seconds (leave empty for full)",
                     id="trim-end",
                     classes="field-input",
@@ -403,23 +421,8 @@ class VTGApp(App):
 
         if event.input.id == "input-path" and event.value:
             path = event.value.strip().strip("'\"")
-            # Handle file:// URIs pasted or dropped into the input
-            if path.startswith("file://"):
-                path = unquote(path[7:])
             if os.path.isfile(path) and is_supported_format(path):
                 self.set_input_file(path)
-
-    async def on_event(self, event: events.Event) -> None:
-        """Intercept paste events before child widgets consume them."""
-        if isinstance(event, events.Paste):
-            paths = _parse_dropped_paths(event.text)
-            video_paths = [p for p in paths if is_supported_format(p)]
-            if video_paths:
-                self.set_input_file(video_paths[0])
-                event.stop()
-                event.prevent_default()
-                return
-        await super().on_event(event)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "convert-btn":
