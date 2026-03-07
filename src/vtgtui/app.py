@@ -63,8 +63,11 @@ class _FileDropInput(Input):
     """
 
     def _on_paste(self, event: events.Paste) -> None:
+        self.app.log_message(f"[dim][DEBUG] _FileDropInput paste on {self.id}: {event.text!r}[/]")
         paths = _parse_dropped_paths(event.text)
+        self.app.log_message(f"[dim][DEBUG] parsed paths: {paths}[/]")
         video_paths = [p for p in paths if is_supported_format(p)]
+        self.app.log_message(f"[dim][DEBUG] video paths: {video_paths}[/]")
         if video_paths:
             self.app.set_input_file(video_paths[0])
             event.stop()
