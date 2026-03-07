@@ -38,12 +38,30 @@ python -m vtgtui
 
 ### Controls
 
-- **Browse** (`Ctrl+B`) to open a native file picker, or type a path into the input field
-- **Trim** the video by setting start and end times (in seconds), or drag the timeline scrubber handles
-- Select a **quality preset** (or configure **Custom** settings) and click **Convert**
-- The **spec panels** show input video details alongside the expected GIF output specs, updating live as you change quality or trim settings
-- Press `Escape` to cancel an in-progress conversion
-- Press `q` to quit
+| Key | Action |
+|---|---|
+| `Ctrl+B` | Open native file picker |
+| `Ctrl+O` | Focus the input path field |
+| `Escape` | Cancel an in-progress conversion |
+| `q` | Quit |
+
+### Video Trimming
+
+Set the **Start** and **End** time fields (in seconds) to convert only a portion of the video. When a file is selected, these fields are automatically populated with the full video duration.
+
+The interactive **timeline scrubber** lets you visually drag start/end handles. When focused:
+
+| Key | Action |
+|---|---|
+| `Left` / `Right` | Nudge active handle by 0.1s |
+| `Shift+Left` / `Shift+Right` | Nudge active handle by 1.0s |
+| `Tab` | Switch between start and end handles |
+| `Home` | Jump active handle to the start |
+| `End` | Jump active handle to the end |
+
+### Frame Preview
+
+A live frame preview updates as you scrub through the timeline. In terminals that support the **Kitty graphics protocol** (Kitty, Ghostty, WezTerm, Konsole), frames are displayed at high resolution. Other terminals use a **half-block character** fallback. The preview preserves the video's aspect ratio and centers within the available space.
 
 ### Quality Presets
 
@@ -56,9 +74,7 @@ python -m vtgtui
 
 The **Custom** option launches a modal where you can configure FPS, max width, color count, and whether to use two-pass palette generation.
 
-### Video Trimming
-
-Set the **Start** and **End** time fields (in seconds) to convert only a portion of the video. When a file is selected, these fields are automatically populated with the full video duration. Use the interactive timeline scrubber to visually adjust the trim range.
+The **spec panels** show input video details alongside the expected GIF output specs, updating live as you change quality or trim settings.
 
 ### Supported Formats
 
