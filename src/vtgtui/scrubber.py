@@ -9,7 +9,7 @@ from typing import Optional
 from rich.text import Text
 from textual import work
 from textual.binding import Binding
-from textual.events import MouseDown, MouseMove, MouseUp
+from textual.events import MouseDown, MouseMove, MouseUp, Resize
 from textual.message import Message
 from textual.reactive import reactive
 from textual.widget import Widget
@@ -380,6 +380,12 @@ class FramePreview(Widget):
         self._cache.clear()
         self.video_path = None
         self.refresh()
+
+    def on_resize(self, event: Resize) -> None:
+        """Redraw kitty image at new position/size when the widget resizes."""
+        if self._use_kitty and self._kitty_shown and self._last_kitty_png:
+            hide_image(self.KITTY_IMAGE_ID)
+            self.set_timer(0.05, self._display_kitty_redraw)
 
     def hide_kitty(self) -> None:
         """Temporarily hide the kitty image (e.g. when a modal opens)."""
