@@ -45,10 +45,9 @@ def _parse_dropped_paths(text: str) -> list[str]:
     - Quoted paths (single or double quotes)
     - file:// URIs
     """
-    paths = []
+    paths: list[str] = []
     for line in text.strip().splitlines():
         line = line.strip().strip("'\"")
-        # Handle file:// URIs
         if line.startswith("file://"):
             line = unquote(line[7:])
         if line and os.path.exists(line):
@@ -56,21 +55,26 @@ def _parse_dropped_paths(text: str) -> list[str]:
     return paths
 
 
-class _FileDropInput(Input):
-    """Input that intercepts paste events containing file paths.
+def _handle_video_drop(app: App, text: str) -> bool:
+    """Try to handle pasted text as a file drop. Returns True if handled."""
+    paths = _parse_dropped_paths(text)
+    video_paths = [p for p in paths if is_supported_format(p)]
+    if video_paths:
+        app.set_input_file(video_paths[0])
+        return True
+    if paths:
+        app.log_message(f"[red]Unsupported format:[/] {Path(paths[0]).suffix}")
+        return True
+    return False
 
-    When a video file path is pasted (via drag-and-drop or clipboard),
-    it redirects to set_input_file instead of inserting into this field.
-    """
+
+class _FileDropInput(Input):
+    """Input that intercepts paste events containing file paths."""
 
     def _on_paste(self, event: events.Paste) -> None:
-        paths = _parse_dropped_paths(event.text)
-        video_paths = [p for p in paths if is_supported_format(p)]
-        if video_paths:
-            self.app.set_input_file(video_paths[0])
+        if _handle_video_drop(self.app, event.text):
             event.stop()
             return
-        # Not a file drop — let the default Input paste handler run
         super()._on_paste(event)
 
 
@@ -84,13 +88,7 @@ class DropZone(Static):
         )
 
     def _on_paste(self, event: events.Paste) -> None:
-        """Handle paste events (file drag-and-drop in supported terminals)."""
-        paths = _parse_dropped_paths(event.text)
-        video_paths = [p for p in paths if is_supported_format(p)]
-        if video_paths:
-            self.app.set_input_file(video_paths[0])
-        elif paths:
-            self.app.log_message(f"[red]Unsupported format:[/] {Path(paths[0]).suffix}")
+        _handle_video_drop(self.app, event.text)
         event.stop()
 
 
@@ -257,7 +255,7 @@ class VTGApp(App):
                     id="input-path",
                     classes="field-input",
                 )
-                yield Button("Browse", id="browse-btn", classes="browse-btn")
+                yield Button("Browse", variant="primary", id="browse-btn", classes="browse-btn")
 
             with Horizontal(classes="field-row"):
                 yield Label("Output:", classes="field-label")

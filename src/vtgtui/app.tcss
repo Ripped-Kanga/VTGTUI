@@ -44,8 +44,9 @@ Screen {
 
 .browse-btn {
     width: auto;
-    min-width: 10;
+    min-width: 12;
     margin-left: 1;
+    text-style: bold;
 }
 
 #scrubber {
