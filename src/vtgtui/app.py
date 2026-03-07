@@ -223,6 +223,7 @@ class VTGApp(App):
         self._cancelled = False
         self._custom_preset: QualityPreset | None = None
         self._syncing_scrubber = False
+        self._current_input_file: str | None = None
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -291,6 +292,11 @@ class VTGApp(App):
 
     def set_input_file(self, path: str) -> None:
         """Set the input file path and auto-generate output path."""
+        resolved = str(Path(path).resolve())
+        if self._current_input_file == resolved:
+            return
+        self._current_input_file = resolved
+
         input_widget = self.query_one("#input-path", Input)
         input_widget.value = path
 
@@ -397,12 +403,11 @@ class VTGApp(App):
 
         if event.input.id == "input-path" and event.value:
             path = event.value.strip().strip("'\"")
+            # Handle file:// URIs pasted or dropped into the input
+            if path.startswith("file://"):
+                path = unquote(path[7:])
             if os.path.isfile(path) and is_supported_format(path):
-                p = Path(path)
-                output = p.with_suffix(".gif")
-                output_input = self.query_one("#output-path", Input)
-                if not output_input.value:
-                    output_input.value = str(output)
+                self.set_input_file(path)
 
     async def on_event(self, event: events.Event) -> None:
         """Intercept paste events before child widgets consume them."""
