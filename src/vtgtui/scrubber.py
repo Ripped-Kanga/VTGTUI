@@ -338,7 +338,10 @@ class FramePreview(Widget):
                     video_path, timestamp,
                     max_width=widget_w, max_height=max_h,
                 )
-                self._rendered = render_halfblock(rgb, w, h)
+                self._rendered = render_halfblock(
+                    rgb, w, h,
+                    pad_w=widget_w, pad_h=widget_h,
+                )
         except Exception:
             self._rendered = Text("[No preview available]", style="dim italic")
             self._kitty_shown = False
@@ -355,15 +358,57 @@ class FramePreview(Widget):
             # Delay image display until after Textual finishes its render pass
             self.set_timer(0.05, self._display_kitty_image)
 
+    def _aspect_fit(self, region_w: int, region_h: int) -> tuple[int, int, int, int]:
+        """Calculate cols/rows that fit the image aspect ratio within the region.
+
+        Terminal cells are ~2:1 (each cell is roughly twice as tall as wide in
+        pixels), so 1 row ≈ 2 cols worth of vertical space.
+
+        Returns (cols, rows, x_offset, y_offset) for centering.
+        """
+        if not self._pending_png and not self._last_kitty_png:
+            return region_w, region_h, 0, 0
+
+        png = self._pending_png or self._last_kitty_png
+        # Parse image dimensions from PNG header (IHDR chunk at offset 16)
+        img_w = int.from_bytes(png[16:20], "big")
+        img_h = int.from_bytes(png[20:24], "big")
+
+        if img_w <= 0 or img_h <= 0:
+            return region_w, region_h, 0, 0
+
+        # Image aspect ratio in cell units (each row ≈ 2 cols of height)
+        cell_aspect = 2.0  # rows are ~2x taller than cols are wide
+        img_aspect = img_w / img_h
+
+        # Try fitting to full width
+        cols = region_w
+        rows = int(cols / img_aspect / cell_aspect + 0.5)
+
+        if rows > region_h:
+            # Too tall, fit to height instead
+            rows = region_h
+            cols = int(rows * img_aspect * cell_aspect + 0.5)
+
+        cols = max(cols, 1)
+        rows = max(rows, 1)
+
+        # Center offsets
+        x_off = (region_w - cols) // 2
+        y_off = (region_h - rows) // 2
+
+        return cols, rows, x_off, y_off
+
     def _display_kitty_image(self) -> None:
         """Display the pending Kitty protocol image after Textual has rendered."""
         if not self._pending_png:
             return
         region = self.content_region
+        cols, rows, x_off, y_off = self._aspect_fit(region.width, region.height)
         show_image(
             self._pending_png,
-            x=region.x, y=region.y,
-            cols=region.width, rows=region.height,
+            x=region.x + x_off, y=region.y + y_off,
+            cols=cols, rows=rows,
             image_id=self.KITTY_IMAGE_ID,
         )
         self._last_kitty_png = self._pending_png
@@ -402,9 +447,10 @@ class FramePreview(Widget):
         if not self._last_kitty_png:
             return
         region = self.content_region
+        cols, rows, x_off, y_off = self._aspect_fit(region.width, region.height)
         show_image(
             self._last_kitty_png,
-            x=region.x, y=region.y,
-            cols=region.width, rows=region.height,
+            x=region.x + x_off, y=region.y + y_off,
+            cols=cols, rows=rows,
             image_id=self.KITTY_IMAGE_ID,
         )

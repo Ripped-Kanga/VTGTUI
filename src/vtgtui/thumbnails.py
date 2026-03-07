@@ -135,20 +135,42 @@ def extract_frame_png(
     return result.stdout
 
 
-def render_halfblock(rgb_bytes: bytes, width: int, height: int) -> Text:
+def render_halfblock(
+    rgb_bytes: bytes,
+    width: int,
+    height: int,
+    pad_w: int = 0,
+    pad_h: int = 0,
+) -> Text:
     """Convert raw RGB24 pixel data to Rich Text using half-block characters.
 
     Each terminal row encodes 2 pixel rows:
     - Foreground color = top pixel row (▀ foreground)
     - Background color = bottom pixel row (▀ background)
+
+    If pad_w/pad_h are given, the image is centered within that cell area.
     """
     text = Text()
     row_bytes = width * 3
     data = rgb_bytes  # local ref for speed
 
+    img_rows = height // 2  # terminal rows the image occupies
+    x_pad = max((pad_w - width) // 2, 0) if pad_w > 0 else 0
+    y_pad = max((pad_h - img_rows) // 2, 0) if pad_h > 0 else 0
+
+    # Top vertical padding
+    if y_pad > 0:
+        blank_line = " " * max(pad_w, width)
+        for _ in range(y_pad):
+            text.append(blank_line + "\n")
+
     for y in range(0, height - 1, 2):
         top_off = y * row_bytes
         bot_off = (y + 1) * row_bytes
+
+        # Left horizontal padding
+        if x_pad > 0:
+            text.append(" " * x_pad)
 
         for x in range(width):
             px = x * 3
