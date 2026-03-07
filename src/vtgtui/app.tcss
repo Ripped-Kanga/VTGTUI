@@ -96,13 +96,28 @@ Screen {
     margin-bottom: 1;
 }
 
-#progress-container {
-    height: 3;
-    margin-bottom: 1;
+#progress-bar {
+    width: 100%;
+    margin: 1 0;
+    color: $text;
 }
 
-#progress-bar {
+#progress-bar Bar {
     width: 1fr;
+}
+
+#progress-bar Bar > .bar--bar {
+    color: $success;
+    background: $surface-darken-2;
+}
+
+#progress-bar Bar > .bar--complete {
+    color: $accent;
+}
+
+#progress-bar PercentageStatus {
+    text-style: bold;
+    color: $text;
 }
 
 #log {

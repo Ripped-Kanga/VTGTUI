@@ -243,8 +243,7 @@ class VTGApp(App):
 
             yield Button("Convert", variant="primary", id="convert-btn")
 
-            with Horizontal(id="progress-container"):
-                yield ProgressBar(total=100, show_eta=False, id="progress-bar")
+            yield ProgressBar(total=100, show_eta=False, id="progress-bar")
 
             yield RichLog(highlight=True, markup=True, id="log")
         yield Footer()
