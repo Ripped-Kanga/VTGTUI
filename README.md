@@ -38,10 +38,10 @@ python -m vtgtui
 
 ### Controls
 
-- **Drag & drop** a video file onto the terminal (supported terminals only)
-- **Type or paste** a file path into the input field
-- **Trim** the video by setting start and end times (in seconds) before converting
+- **Browse** (`Ctrl+B`) to open a native file picker, or type a path into the input field
+- **Trim** the video by setting start and end times (in seconds), or drag the timeline scrubber handles
 - Select a **quality preset** (or configure **Custom** settings) and click **Convert**
+- The **spec panels** show input video details alongside the expected GIF output specs, updating live as you change quality or trim settings
 - Press `Escape` to cancel an in-progress conversion
 - Press `q` to quit
 
@@ -58,7 +58,7 @@ The **Custom** option launches a modal where you can configure FPS, max width, c
 
 ### Video Trimming
 
-Set the **Start** and **End** time fields (in seconds) to convert only a portion of the video. When a file is selected, these fields are automatically populated with the full video duration. Video metadata (duration, resolution, FPS) is displayed in the log on file selection.
+Set the **Start** and **End** time fields (in seconds) to convert only a portion of the video. When a file is selected, these fields are automatically populated with the full video duration. Use the interactive timeline scrubber to visually adjust the trim range.
 
 ### Supported Formats
 
