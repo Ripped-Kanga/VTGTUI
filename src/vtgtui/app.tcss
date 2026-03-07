@@ -99,19 +99,10 @@ Screen {
 #progress-container {
     height: 3;
     margin-bottom: 1;
-    layout: horizontal;
 }
 
 #progress-bar {
     width: 1fr;
-}
-
-#progress-label {
-    width: 8;
-    height: 3;
-    content-align: right middle;
-    text-align: right;
-    margin-left: 1;
 }
 
 #log {

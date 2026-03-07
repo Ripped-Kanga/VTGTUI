@@ -245,7 +245,6 @@ class VTGApp(App):
 
             with Horizontal(id="progress-container"):
                 yield ProgressBar(total=100, show_eta=False, id="progress-bar")
-                yield Label("0%", id="progress-label")
 
             yield RichLog(highlight=True, markup=True, id="log")
         yield Footer()
@@ -552,9 +551,7 @@ class VTGApp(App):
         self.call_from_thread(btn.__setattr__, "label", "Converting...")
 
         progress_bar = self.query_one("#progress-bar", ProgressBar)
-        progress_label = self.query_one("#progress-label", Label)
         self.call_from_thread(progress_bar.update, progress=0)
-        self.call_from_thread(progress_label.update, "0%")
 
         preset_name = quality.name if isinstance(quality, QualityPreset) else QUALITY_PRESETS[quality].name
         trim_info = ""
@@ -570,7 +567,6 @@ class VTGApp(App):
         def on_progress(pct: float) -> None:
             clamped = min(int(pct), 100)
             self.call_from_thread(progress_bar.update, progress=clamped)
-            self.call_from_thread(progress_label.update, f"{clamped}%")
 
         def check_cancel() -> bool:
             return self._cancelled
