@@ -303,6 +303,16 @@ class VTGApp(App):
             yield RichLog(highlight=True, markup=True, id="log")
         yield Footer()
 
+    def _on_paste(self, event: events.Paste) -> None:
+        """App-level catch-all for paste events (file drag-and-drop).
+
+        Textual routes Paste to the focused widget. If no widget handles it
+        (e.g. a non-focusable widget or one without a paste handler has focus),
+        the event bubbles up here. This ensures file drops always work.
+        """
+        if _handle_video_drop(self, event.text):
+            event.stop()
+
     def on_mount(self) -> None:
         self.query_one("#progress-bar", ProgressBar).update(progress=0)
         self.log_message("[dim]Ready. Drop a video file or enter a path to begin.[/]")

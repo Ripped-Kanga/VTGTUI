@@ -9,10 +9,7 @@ Reference: https://sw.kovidgoyal.net/kitty/graphics-protocol/
 from __future__ import annotations
 
 import base64
-import fcntl
 import os
-import select
-import termios
 
 
 def detect_kitty_support() -> bool:
@@ -43,31 +40,6 @@ def _open_tty_write():
     return open("/dev/tty", "wb")
 
 
-def _drain_tty_responses() -> None:
-    """Drain any stray terminal responses from /dev/tty input.
-
-    Some terminals send APC responses to graphics commands despite q=2.
-    These bytes leak into Textual's stdin and corrupt the XTerm parser's
-    bracketed paste state, breaking drag-and-drop. We read and discard
-    any pending input immediately after writing graphics commands.
-    """
-    try:
-        fd = os.open("/dev/tty", os.O_RDONLY | os.O_NONBLOCK)
-    except OSError:
-        return
-    try:
-        # Brief wait for any response bytes to arrive
-        ready, _, _ = select.select([fd], [], [], 0.02)
-        if ready:
-            # Drain all available bytes (up to 64KB)
-            try:
-                os.read(fd, 65536)
-            except OSError:
-                pass
-    finally:
-        os.close(fd)
-
-
 def show_image(
     png_data: bytes,
     x: int,
@@ -79,8 +51,8 @@ def show_image(
     """Display a PNG image at a terminal cell position.
 
     Uses the Kitty graphics protocol. Writes directly to /dev/tty to
-    avoid conflicts with Textual's stdout. Drains any terminal responses
-    afterward to prevent interference with Textual's input parser.
+    avoid conflicts with Textual's stdout. All commands use q=2 to
+    suppress terminal responses that would corrupt Textual's input parser.
     """
     try:
         tty = _open_tty_write()
@@ -127,9 +99,6 @@ def show_image(
     finally:
         tty.close()
 
-    # Drain any stray terminal responses to protect Textual's input parser
-    _drain_tty_responses()
-
 
 def hide_image(image_id: int = 1) -> None:
     """Delete a previously displayed image."""
@@ -143,5 +112,3 @@ def hide_image(image_id: int = 1) -> None:
         tty.flush()
     finally:
         tty.close()
-
-    _drain_tty_responses()
