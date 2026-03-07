@@ -9,7 +9,10 @@ Reference: https://sw.kovidgoyal.net/kitty/graphics-protocol/
 from __future__ import annotations
 
 import base64
+import fcntl
 import os
+import select
+import termios
 
 
 def detect_kitty_support() -> bool:
@@ -35,9 +38,34 @@ def detect_kitty_support() -> bool:
     return False
 
 
-def _open_tty():
-    """Open /dev/tty for direct terminal writes (bypasses Textual's stdout)."""
+def _open_tty_write():
+    """Open /dev/tty for writing (bypasses Textual's stdout)."""
     return open("/dev/tty", "wb")
+
+
+def _drain_tty_responses() -> None:
+    """Drain any stray terminal responses from /dev/tty input.
+
+    Some terminals send APC responses to graphics commands despite q=2.
+    These bytes leak into Textual's stdin and corrupt the XTerm parser's
+    bracketed paste state, breaking drag-and-drop. We read and discard
+    any pending input immediately after writing graphics commands.
+    """
+    try:
+        fd = os.open("/dev/tty", os.O_RDONLY | os.O_NONBLOCK)
+    except OSError:
+        return
+    try:
+        # Brief wait for any response bytes to arrive
+        ready, _, _ = select.select([fd], [], [], 0.02)
+        if ready:
+            # Drain all available bytes (up to 64KB)
+            try:
+                os.read(fd, 65536)
+            except OSError:
+                pass
+    finally:
+        os.close(fd)
 
 
 def show_image(
@@ -50,19 +78,12 @@ def show_image(
 ) -> None:
     """Display a PNG image at a terminal cell position.
 
-    Uses the Kitty graphics protocol (KgpOld / cursor-based approach).
-    Writes directly to /dev/tty to avoid conflicts with Textual's stdout.
-
-    Args:
-        png_data: Raw PNG file bytes.
-        x: Column position (0-based).
-        y: Row position (0-based).
-        cols: Display width in terminal columns.
-        rows: Display height in terminal rows.
-        image_id: Unique ID for later deletion.
+    Uses the Kitty graphics protocol. Writes directly to /dev/tty to
+    avoid conflicts with Textual's stdout. Drains any terminal responses
+    afterward to prevent interference with Textual's input parser.
     """
     try:
-        tty = _open_tty()
+        tty = _open_tty_write()
     except OSError:
         return
 
@@ -96,7 +117,7 @@ def show_image(
                     f"C=1,z=-1,q=2,m={m}"
                 )
             else:
-                header = f"m={m}"
+                header = f"q=2,m={m}"
 
             tty.write(f"\x1b_G{header};{chunk}\x1b\\".encode())
 
@@ -106,11 +127,14 @@ def show_image(
     finally:
         tty.close()
 
+    # Drain any stray terminal responses to protect Textual's input parser
+    _drain_tty_responses()
+
 
 def hide_image(image_id: int = 1) -> None:
     """Delete a previously displayed image."""
     try:
-        tty = _open_tty()
+        tty = _open_tty_write()
     except OSError:
         return
 
@@ -119,3 +143,5 @@ def hide_image(image_id: int = 1) -> None:
         tty.flush()
     finally:
         tty.close()
+
+    _drain_tty_responses()
