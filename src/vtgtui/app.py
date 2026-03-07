@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from urllib.parse import unquote
 
-from textual import on, work
+from textual import events, on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, VerticalScroll
@@ -48,7 +49,7 @@ def _parse_dropped_paths(text: str) -> list[str]:
         line = line.strip().strip("'\"")
         # Handle file:// URIs
         if line.startswith("file://"):
-            line = line[7:]
+            line = unquote(line[7:])
         if line and os.path.exists(line):
             paths.append(line)
     return paths
@@ -403,13 +404,17 @@ class VTGApp(App):
                 if not output_input.value:
                     output_input.value = str(output)
 
-    def _on_paste(self, event) -> None:
-        """Handle paste at the app level as fallback."""
-        paths = _parse_dropped_paths(event.text)
-        video_paths = [p for p in paths if is_supported_format(p)]
-        if video_paths:
-            self.set_input_file(video_paths[0])
-            event.stop()
+    async def on_event(self, event: events.Event) -> None:
+        """Intercept paste events before child widgets consume them."""
+        if isinstance(event, events.Paste):
+            paths = _parse_dropped_paths(event.text)
+            video_paths = [p for p in paths if is_supported_format(p)]
+            if video_paths:
+                self.set_input_file(video_paths[0])
+                event.stop()
+                event.prevent_default()
+                return
+        await super().on_event(event)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "convert-btn":
