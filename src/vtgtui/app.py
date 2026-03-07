@@ -32,6 +32,7 @@ from vtgtui.converter import (
     get_video_info,
     is_supported_format,
 )
+from vtgtui.browse import browse_for_video
 from vtgtui.scrubber import FramePreview, TimelineScrubber
 
 
@@ -63,11 +64,8 @@ class _FileDropInput(Input):
     """
 
     def _on_paste(self, event: events.Paste) -> None:
-        self.app.log_message(f"[dim][DEBUG] _FileDropInput paste on {self.id}: {event.text!r}[/]")
         paths = _parse_dropped_paths(event.text)
-        self.app.log_message(f"[dim][DEBUG] parsed paths: {paths}[/]")
         video_paths = [p for p in paths if is_supported_format(p)]
-        self.app.log_message(f"[dim][DEBUG] video paths: {video_paths}[/]")
         if video_paths:
             self.app.set_input_file(video_paths[0])
             event.stop()
@@ -235,6 +233,7 @@ class VTGApp(App):
     BINDINGS = [
         Binding("q", "quit", "Quit", show=True),
         Binding("ctrl+o", "focus_input", "Open", show=True),
+        Binding("ctrl+b", "browse", "Browse", show=True),
         Binding("escape", "cancel", "Cancel", show=True),
     ]
 
@@ -258,6 +257,7 @@ class VTGApp(App):
                     id="input-path",
                     classes="field-input",
                 )
+                yield Button("Browse", id="browse-btn", classes="browse-btn")
 
             with Horizontal(classes="field-row"):
                 yield Label("Output:", classes="field-label")
@@ -427,21 +427,30 @@ class VTGApp(App):
             if os.path.isfile(path) and is_supported_format(path):
                 self.set_input_file(path)
 
-    def on_paste(self, event: events.Paste) -> None:
-        """Catch any paste events that bubble up to the app level."""
-        self.log_message(f"[dim][DEBUG] App.on_paste: {event.text!r}[/]")
-
-    def on_key(self, event: events.Key) -> None:
-        """Catch key events to detect if drop arrives as key input."""
-        if event.character and ord(event.character) > 127:
-            self.log_message(f"[dim][DEBUG] App.on_key non-ascii: {event!r}[/]")
-
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "convert-btn":
             self.action_convert()
+        elif event.button.id == "browse-btn":
+            self.action_browse()
 
     def action_focus_input(self) -> None:
         self.query_one("#input-path", Input).focus()
+
+    def action_browse(self) -> None:
+        """Open the native file browser dialog in a background thread."""
+        browse_btn = self.query_one("#browse-btn", Button)
+        browse_btn.disabled = True
+        self._do_browse()
+
+    @work(thread=True)
+    def _do_browse(self) -> None:
+        path = browse_for_video()
+        browse_btn = self.query_one("#browse-btn", Button)
+        self.call_from_thread(browse_btn.__setattr__, "disabled", False)
+        if path:
+            self.call_from_thread(self.set_input_file, path)
+        else:
+            self.call_from_thread(self.log_message, "[dim]No file selected.[/]")
 
     @on(Select.Changed, "#quality-select")
     def on_quality_changed(self, event: Select.Changed) -> None:
