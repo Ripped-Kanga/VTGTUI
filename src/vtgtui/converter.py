@@ -13,6 +13,8 @@ from typing import Callable, Optional
 
 import imageio_ffmpeg
 
+_TIME_PATTERN = re.compile(r"out_time_us=(\d+)")
+
 SUPPORTED_EXTENSIONS = {
     ".mp4", ".avi", ".mkv", ".mov", ".webm", ".wmv",
     ".flv", ".m4v", ".mpeg", ".mpg", ".3gp", ".ts",
@@ -268,7 +270,7 @@ def _convert_two_pass(
 
 def quality_needs_dither(preset: QualityPreset) -> bool:
     """Determine if dithering should be used based on quality preset."""
-    return preset.name != "Uncompressed"
+    return preset.colors < 256
 
 
 def _run_ffmpeg(
@@ -286,14 +288,13 @@ def _run_ffmpeg(
     )
 
     try:
-        time_pattern = re.compile(r"out_time_us=(\d+)")
         for line in iter(process.stdout.readline, ""):
             if cancel_check and cancel_check():
                 process.terminate()
                 process.wait()
                 return
 
-            match = time_pattern.search(line)
+            match = _TIME_PATTERN.search(line)
             if match and duration > 0 and progress_callback:
                 current_us = int(match.group(1))
                 current_s = current_us / 1_000_000
