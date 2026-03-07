@@ -451,15 +451,18 @@ class VTGApp(App):
     @on(Select.Changed, "#quality-select")
     def on_quality_changed(self, event: Select.Changed) -> None:
         if event.value == "custom":
+            self.query_one("#frame-preview", FramePreview).hide_kitty()
             self.push_screen(CustomQualityScreen(), self._on_custom_quality_result)
         else:
             self._update_spec_panels()
 
     def _on_custom_quality_result(self, preset: QualityPreset | None) -> None:
         select = self.query_one("#quality-select", Select)
+        preview = self.query_one("#frame-preview", FramePreview)
         if preset is None:
             # User cancelled — revert to previous non-custom value
             select.value = "high"
+            preview.restore_kitty()
             return
         self._custom_preset = preset
         desc = (
@@ -469,6 +472,7 @@ class VTGApp(App):
         )
         self.log_message(f"[bold]{desc}[/]")
         self._update_spec_panels()
+        preview.restore_kitty()
 
     def action_cancel(self) -> None:
         if self._converting:

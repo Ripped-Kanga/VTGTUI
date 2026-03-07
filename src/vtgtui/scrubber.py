@@ -286,6 +286,7 @@ class FramePreview(Widget):
         self._use_kitty = detect_kitty_support()
         self._kitty_shown = False
         self._pending_png: Optional[bytes] = None
+        self._last_kitty_png: Optional[bytes] = None
 
     def render(self) -> Text:
         if self._loading:
@@ -365,6 +366,7 @@ class FramePreview(Widget):
             cols=region.width, rows=region.height,
             image_id=self.KITTY_IMAGE_ID,
         )
+        self._last_kitty_png = self._pending_png
         self._kitty_shown = True
         self._pending_png = None
 
@@ -378,3 +380,25 @@ class FramePreview(Widget):
         self._cache.clear()
         self.video_path = None
         self.refresh()
+
+    def hide_kitty(self) -> None:
+        """Temporarily hide the kitty image (e.g. when a modal opens)."""
+        if self._use_kitty and self._kitty_shown:
+            hide_image(self.KITTY_IMAGE_ID)
+
+    def restore_kitty(self) -> None:
+        """Re-display the kitty image after it was temporarily hidden."""
+        if self._use_kitty and self._kitty_shown and self._last_kitty_png:
+            self.set_timer(0.05, self._display_kitty_redraw)
+
+    def _display_kitty_redraw(self) -> None:
+        """Redraw the last kitty image."""
+        if not self._last_kitty_png:
+            return
+        region = self.content_region
+        show_image(
+            self._last_kitty_png,
+            x=region.x, y=region.y,
+            cols=region.width, rows=region.height,
+            image_id=self.KITTY_IMAGE_ID,
+        )
