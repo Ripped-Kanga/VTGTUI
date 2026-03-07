@@ -427,6 +427,15 @@ class VTGApp(App):
             if os.path.isfile(path) and is_supported_format(path):
                 self.set_input_file(path)
 
+    def on_paste(self, event: events.Paste) -> None:
+        """Catch any paste events that bubble up to the app level."""
+        self.log_message(f"[dim][DEBUG] App.on_paste: {event.text!r}[/]")
+
+    def on_key(self, event: events.Key) -> None:
+        """Catch key events to detect if drop arrives as key input."""
+        if event.character and ord(event.character) > 127:
+            self.log_message(f"[dim][DEBUG] App.on_key non-ascii: {event!r}[/]")
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "convert-btn":
             self.action_convert()
