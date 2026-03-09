@@ -77,6 +77,21 @@ Cross-platform native file picker (used only on macOS/Windows; Linux uses `FileB
 - The scrubber and trim inputs are kept in sync bidirectionally via a `_syncing_scrubber` guard flag.
 - ffmpeg is sourced exclusively from `imageio_ffmpeg.get_ffmpeg_exe()` — no system ffmpeg dependency.
 
+## Terminal Requirements (Linux)
+
+**Recommended terminal: [Kitty](https://sw.kovidgoyal.net/kitty/)**
+
+Kitty is the only terminal confirmed to support all advanced features on Linux:
+
+| Feature | Kitty | Ghostty | Alacritty | WezTerm |
+|---|---|---|---|---|
+| Frame preview (Kitty graphics protocol) | ✅ | ✅ | ❌ | ✅ |
+| File drag-and-drop | ✅ | ❌ | ❌ | ✅ |
+
+File drag-and-drop requires the terminal to convert Wayland/X11 XDG DnD file drops into bracketed paste. Ghostty and Alacritty do not implement this — the window focuses on drag but no paste event is sent to the app.
+
+When developing or testing on Linux, **use Kitty** to exercise the full feature set.
+
 ## Running / Installing
 ```bash
 pip install -e .

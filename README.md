@@ -61,7 +61,13 @@ The interactive **timeline scrubber** lets you visually drag start/end handles. 
 
 ### Frame Preview
 
-A live frame preview updates as you scrub through the timeline. In terminals that support the **Kitty graphics protocol** (Kitty, Ghostty, WezTerm, Konsole), frames are displayed at high resolution. Other terminals use a **half-block character** fallback. The preview preserves the video's aspect ratio and centers within the available space.
+A live frame preview updates as you scrub through the timeline. In terminals that support the **Kitty graphics protocol** (Kitty, Ghostty, WezTerm, Konsole), frames are displayed at high resolution. The preview preserves the video's aspect ratio and centers within the available space.
+
+### Drag and Drop
+
+Drag a video file from your file manager directly onto the terminal window to load it instantly. The app detects the dropped file path and populates all fields automatically.
+
+> **Linux:** This requires a terminal that converts file drag-and-drop to bracketed paste. **[Kitty](https://sw.kovidgoyal.net/kitty/) is recommended** — it fully supports this on both X11 and Wayland. Ghostty and Alacritty do not currently support file drag-and-drop.
 
 ### Quality Presets
 
