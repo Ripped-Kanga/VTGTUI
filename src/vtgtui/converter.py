@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import subprocess
@@ -14,6 +13,11 @@ from typing import Callable, Optional
 import imageio_ffmpeg
 
 _TIME_PATTERN = re.compile(r"out_time_us=(\d+)")
+_DURATION_PATTERN = re.compile(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)")
+_STREAM_PATTERN = re.compile(
+    r"Stream\s+#\d+:\d+.*Video:.*?\s(\d{2,5})x(\d{2,5})(?:\s|,)"
+)
+_FPS_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s+fps")
 
 SUPPORTED_EXTENSIONS = {
     ".mp4", ".avi", ".mkv", ".mov", ".webm", ".wmv",
@@ -50,14 +54,23 @@ def get_ffmpeg_path() -> str:
     return imageio_ffmpeg.get_ffmpeg_exe()
 
 
-def get_ffprobe_path() -> str:
-    """Get the path to ffprobe, falling back to system ffprobe."""
+def probe_dimensions(video_path: str | Path) -> tuple[int, int]:
+    """Probe a video file for its width and height using ffmpeg.
+
+    Uses ``ffmpeg -i`` stderr parsing so ffprobe is not required.
+    """
     ffmpeg = get_ffmpeg_path()
-    ffprobe = Path(ffmpeg).parent / "ffprobe"
-    if ffprobe.exists():
-        return str(ffprobe)
-    # Try system ffprobe
-    return "ffprobe"
+    result = subprocess.run(
+        [ffmpeg, "-i", str(video_path)],
+        capture_output=True, text=True, timeout=10,
+    )
+    # ffmpeg -i always exits non-zero when no output is given, so we
+    # parse stderr regardless of return code.
+    stderr = result.stderr
+    m = _STREAM_PATTERN.search(stderr)
+    if not m:
+        raise RuntimeError(f"Could not detect video dimensions: {stderr[:200]}")
+    return int(m.group(1)), int(m.group(2))
 
 
 def is_supported_format(path: str | Path) -> bool:
@@ -66,41 +79,36 @@ def is_supported_format(path: str | Path) -> bool:
 
 
 def get_video_info(path: str | Path) -> VideoInfo:
-    """Probe a video file for duration, resolution, and fps."""
-    ffprobe = get_ffprobe_path()
-    cmd = [
-        ffprobe,
-        "-v", "quiet",
-        "-print_format", "json",
-        "-show_format",
-        "-show_streams",
-        str(path),
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-    data = json.loads(result.stdout)
+    """Probe a video file for duration, resolution, and fps.
 
-    # Find the video stream
-    video_stream = None
-    for stream in data.get("streams", []):
-        if stream.get("codec_type") == "video":
-            video_stream = stream
-            break
+    Uses ``ffmpeg -i`` stderr parsing instead of ffprobe, since
+    imageio-ffmpeg only bundles ffmpeg.
+    """
+    ffmpeg = get_ffmpeg_path()
+    result = subprocess.run(
+        [ffmpeg, "-i", str(path)],
+        capture_output=True, text=True, timeout=10,
+    )
+    stderr = result.stderr
 
-    if video_stream is None:
+    # Duration
+    dur_match = _DURATION_PATTERN.search(stderr)
+    if dur_match:
+        h, m, s = dur_match.group(1), dur_match.group(2), dur_match.group(3)
+        duration = int(h) * 3600 + int(m) * 60 + float(s)
+    else:
+        duration = 0.0
+
+    # Resolution
+    stream_match = _STREAM_PATTERN.search(stderr)
+    if not stream_match:
         raise ValueError("No video stream found in file")
+    width = int(stream_match.group(1))
+    height = int(stream_match.group(2))
 
-    width = int(video_stream["width"])
-    height = int(video_stream["height"])
-
-    # Parse fps from r_frame_rate (e.g. "30/1" or "30000/1001")
-    fps_str = video_stream.get("r_frame_rate", "30/1")
-    num, den = fps_str.split("/")
-    fps = float(num) / float(den) if float(den) != 0 else 30.0
-
-    # Duration from format or stream
-    duration = float(data.get("format", {}).get("duration", 0))
-    if duration == 0:
-        duration = float(video_stream.get("duration", 0))
+    # FPS
+    fps_match = _FPS_PATTERN.search(stderr)
+    fps = float(fps_match.group(1)) if fps_match else 30.0
 
     return VideoInfo(duration=duration, width=width, height=height, fps=fps)
 

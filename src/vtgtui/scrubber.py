@@ -14,7 +14,7 @@ from textual.reactive import reactive
 from textual.widget import Widget
 
 from vtgtui.kitty_graphics import detect_kitty_support, hide_image, show_image
-from vtgtui.thumbnails import ThumbnailCache, render_halfblock
+from vtgtui.thumbnails import ThumbnailCache
 
 
 class TimelineScrubber(Widget, can_focus=True):
@@ -262,7 +262,11 @@ class TimelineScrubber(Widget, can_focus=True):
 
 
 class FramePreview(Widget):
-    """Displays a video frame preview using Kitty graphics or half-block fallback."""
+    """Displays a video frame preview using the Kitty graphics protocol.
+
+    Only visible in terminals that support Kitty graphics (Kitty, Ghostty,
+    WezTerm, Konsole).  The widget hides itself on unsupported terminals.
+    """
 
     DEFAULT_CSS = """
     FramePreview {
@@ -273,41 +277,45 @@ class FramePreview(Widget):
 
     KITTY_IMAGE_ID = 42
 
+    #: ``True`` when the running terminal supports Kitty graphics.
+    supports_preview: bool = detect_kitty_support()
+
     preview_time: reactive[float] = reactive(0.0)
 
     def __init__(self, id: Optional[str] = None) -> None:
         super().__init__(id=id)
         self.video_path: Optional[str] = None
         self._cache = ThumbnailCache(max_entries=20)
-        self._rendered: Optional[Text] = None
         self._loading = False
         self._last_request_time: float = 0.0
-        self._use_kitty = detect_kitty_support()
         self._kitty_shown = False
         self._pending_png: Optional[bytes] = None
         self._last_kitty_png: Optional[bytes] = None
 
+    def on_mount(self) -> None:
+        """Hide the widget when Kitty graphics are not available."""
+        if not self.supports_preview:
+            self.display = False
+
     def render(self) -> Text:
         if self._loading:
             return Text("Loading preview...", style="dim italic")
-        if self._use_kitty and self._kitty_shown:
-            # Return empty text — the Kitty image overlays on a separate layer
+        if self._kitty_shown:
             return Text("")
-        if self._rendered is not None:
-            return self._rendered
         if self.video_path is None:
             return Text("No video loaded", style="dim")
         return Text("Hover scrubber or move handles to preview", style="dim")
 
     def update_preview(self, timestamp: float, video_path: str) -> None:
-        """Request a preview update with debounce."""
+        """Request a preview update.  No-op when Kitty is not supported."""
+        if not self.supports_preview:
+            return
         self.video_path = video_path
         self.preview_time = timestamp
         now = time.monotonic()
         self._last_request_time = now
-        # Capture dimensions on the main thread where layout is valid
-        w = self.size.width - 2 if self.size.width > 2 else 80  # subtract border
-        h = self.size.height - 2 if self.size.height > 2 else 10  # subtract border
+        w = self.size.width - 2 if self.size.width > 2 else 80
+        h = self.size.height - 2 if self.size.height > 2 else 10
         self._extract_frame(timestamp, video_path, now, w, h)
 
     @work(thread=True)
@@ -315,7 +323,7 @@ class FramePreview(Widget):
         self, timestamp: float, video_path: str, request_time: float,
         widget_w: int = 80, widget_h: int = 10,
     ) -> None:
-        """Extract and render a frame in a background thread."""
+        """Extract a PNG frame in a background thread."""
         if request_time != self._last_request_time:
             return
 
@@ -323,38 +331,23 @@ class FramePreview(Widget):
         self.app.call_from_thread(self.refresh)
 
         try:
-            if self._use_kitty:
-                # Extract PNG at high resolution — terminal handles scaling
-                max_px_w = min(widget_w * 12, 1920)
-                max_px_h = min(widget_h * 24, 1080)
-                self._pending_png = self._cache.get_png(
-                    video_path, timestamp,
-                    max_width=max_px_w, max_height=max_px_h,
-                )
-            else:
-                max_h = widget_h * 2
-                rgb, w, h = self._cache.get(
-                    video_path, timestamp,
-                    max_width=widget_w, max_height=max_h,
-                )
-                self._rendered = render_halfblock(
-                    rgb, w, h,
-                    pad_w=widget_w, pad_h=widget_h,
-                )
+            max_px_w = min(widget_w * 12, 1920)
+            max_px_h = min(widget_h * 24, 1080)
+            self._pending_png = self._cache.get_png(
+                video_path, timestamp,
+                max_width=max_px_w, max_height=max_px_h,
+            )
         except Exception:
-            self._rendered = Text("[No preview available]", style="dim italic")
             self._kitty_shown = False
             self._pending_png = None
         finally:
             self._loading = False
-            # Schedule display on main thread
             self.app.call_from_thread(self._finish_render)
 
     def _finish_render(self) -> None:
         """Called on main thread after frame extraction completes."""
         self.refresh()
-        if self._use_kitty and self._pending_png:
-            # Delay image display until after Textual finishes its render pass
+        if self._pending_png:
             self.set_timer(0.05, self._display_kitty_image)
 
     def _aspect_fit(self, region_w: int, region_h: int) -> tuple[int, int, int, int]:
@@ -416,29 +409,28 @@ class FramePreview(Widget):
 
     def clear_preview(self) -> None:
         """Clear the preview and cache."""
-        if self._use_kitty and self._kitty_shown:
+        if self._kitty_shown:
             hide_image(self.KITTY_IMAGE_ID)
             self._kitty_shown = False
         self._pending_png = None
-        self._rendered = None
         self._cache.clear()
         self.video_path = None
         self.refresh()
 
     def on_resize(self, event: Resize) -> None:
         """Redraw kitty image at new position/size when the widget resizes."""
-        if self._use_kitty and self._kitty_shown and self._last_kitty_png:
+        if self._kitty_shown and self._last_kitty_png:
             hide_image(self.KITTY_IMAGE_ID)
             self.set_timer(0.05, self._display_kitty_redraw)
 
     def hide_kitty(self) -> None:
         """Temporarily hide the kitty image (e.g. when a modal opens)."""
-        if self._use_kitty and self._kitty_shown:
+        if self._kitty_shown:
             hide_image(self.KITTY_IMAGE_ID)
 
     def restore_kitty(self) -> None:
         """Re-display the kitty image after it was temporarily hidden."""
-        if self._use_kitty and self._kitty_shown and self._last_kitty_png:
+        if self._kitty_shown and self._last_kitty_png:
             self.set_timer(0.05, self._display_kitty_redraw)
 
     def _display_kitty_redraw(self) -> None:
