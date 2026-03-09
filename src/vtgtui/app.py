@@ -555,7 +555,12 @@ class VTGApp(App):
             self._update_spec_panels()
 
         if event.input.id == "input-path" and event.value:
-            path = event.value.strip().strip("'\"")
+            raw = event.value.strip()
+            # Resolve file:// URIs — terminals paste these on drag-and-drop
+            if raw.startswith("file://"):
+                path = unquote(raw[7:]).splitlines()[0].strip()
+            else:
+                path = raw.strip("'\"")
             if os.path.isfile(path) and is_supported_format(path):
                 self.set_input_file(path)
 
