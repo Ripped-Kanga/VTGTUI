@@ -346,8 +346,8 @@ class VTGApp(App):
             preview.update_preview(0.0, path)
 
             self._update_spec_panels()
-        except Exception:
-            pass
+        except Exception as e:
+            self.log_message(f"[red]Failed to probe video:[/] {e}")
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         if event.input.id == "input-path" and event.value:

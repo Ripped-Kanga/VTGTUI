@@ -53,10 +53,15 @@ def get_ffmpeg_path() -> str:
 def get_ffprobe_path() -> str:
     """Get the path to ffprobe, falling back to system ffprobe."""
     ffmpeg = get_ffmpeg_path()
-    ffprobe = Path(ffmpeg).parent / "ffprobe"
-    if ffprobe.exists():
-        return str(ffprobe)
-    # Try system ffprobe
+    ffmpeg_dir = Path(ffmpeg).parent
+
+    # Try with and without .exe for cross-platform support
+    for name in ("ffprobe", "ffprobe.exe"):
+        candidate = ffmpeg_dir / name
+        if candidate.exists():
+            return str(candidate)
+
+    # Fall back to system ffprobe
     return "ffprobe"
 
 
