@@ -8,7 +8,7 @@ from typing import Optional
 
 from rich.text import Text
 
-from vtgtui.converter import get_ffmpeg_path, get_ffprobe_path
+from vtgtui.converter import get_ffmpeg_path, probe_dimensions
 
 
 def extract_frame_raw(
@@ -25,22 +25,7 @@ def extract_frame_raw(
     Returns (rgb_bytes, width, height).
     """
     ffmpeg = get_ffmpeg_path()
-
-    # First probe the video to get dimensions for correct output size
-    ffprobe = get_ffprobe_path()
-    probe_cmd = [
-        ffprobe, "-v", "quiet",
-        "-select_streams", "v:0",
-        "-show_entries", "stream=width,height",
-        "-print_format", "csv=p=0:s=x",
-        str(video_path),
-    ]
-    probe_result = subprocess.run(probe_cmd, capture_output=True, text=True, timeout=10)
-    if probe_result.returncode != 0:
-        raise RuntimeError(f"ffprobe failed: {probe_result.stderr}")
-
-    parts = probe_result.stdout.strip().split("x")
-    orig_w, orig_h = int(parts[0]), int(parts[1])
+    orig_w, orig_h = probe_dimensions(video_path)
 
     # Scale to fit width first
     scale_w = min(orig_w, max_width)
@@ -92,21 +77,7 @@ def extract_frame_png(
     Returns raw PNG data at up to max_width x max_height, preserving aspect ratio.
     """
     ffmpeg = get_ffmpeg_path()
-    ffprobe = get_ffprobe_path()
-
-    probe_cmd = [
-        ffprobe, "-v", "quiet",
-        "-select_streams", "v:0",
-        "-show_entries", "stream=width,height",
-        "-print_format", "csv=p=0:s=x",
-        str(video_path),
-    ]
-    probe_result = subprocess.run(probe_cmd, capture_output=True, text=True, timeout=10)
-    if probe_result.returncode != 0:
-        raise RuntimeError(f"ffprobe failed: {probe_result.stderr}")
-
-    parts = probe_result.stdout.strip().split("x")
-    orig_w, orig_h = int(parts[0]), int(parts[1])
+    orig_w, orig_h = probe_dimensions(video_path)
 
     # Scale to fit within bounds preserving aspect ratio
     scale = min(max_width / orig_w, max_height / orig_h, 1.0)
