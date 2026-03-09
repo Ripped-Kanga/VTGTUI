@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 from textual import on, work
 from textual.app import App, ComposeResult
@@ -170,10 +171,14 @@ class CustomQualityScreen(ModalScreen[QualityPreset | None]):
 
 
 class _VideoTree(DirectoryTree):
-    """DirectoryTree that only shows directories and supported video files."""
+    """DirectoryTree that only shows non-hidden directories and supported video files."""
 
     def filter_paths(self, paths):
-        return [p for p in paths if p.is_dir() or is_supported_format(p)]
+        return [
+            p for p in paths
+            if not p.name.startswith(".")
+            and (p.is_dir() or is_supported_format(p))
+        ]
 
 
 class FileBrowserScreen(ModalScreen):
@@ -302,7 +307,7 @@ class VTGApp(App):
             with Horizontal(classes="field-row"):
                 yield Label("Input:", classes="field-label")
                 yield Input(
-                    placeholder="Path to video file...",
+                    placeholder="Path to video file (or drag and drop here)...",
                     id="input-path",
                     classes="field-input",
                 )
@@ -358,7 +363,9 @@ class VTGApp(App):
 
     def on_mount(self) -> None:
         self.query_one("#progress-bar", ProgressBar).update(progress=0)
-        self.log_message("[dim]Ready. Enter a path or browse to select a video file.[/]")
+        self.log_message(
+            "[dim]Ready. Enter a path, browse, or drag and drop a video file onto this window.[/]"
+        )
         formats = ", ".join(sorted(SUPPORTED_EXTENSIONS))
         self.log_message(f"[dim]Supported formats: {formats}[/]")
 
@@ -456,6 +463,23 @@ class VTGApp(App):
             self._update_spec_panels()
         except Exception as e:
             self.log_message(f"[red]Failed to probe video:[/] {e}")
+
+    def on_paste(self, event) -> None:
+        """Handle file drag-and-drop: terminals paste the file path on drop."""
+        text = event.text.strip()
+        if not text:
+            return
+
+        # Resolve file:// URIs (common from file managers like Nautilus, Dolphin)
+        if text.startswith("file://"):
+            path = unquote(urlparse(text).path)
+        else:
+            path = text.strip("'\"")
+
+        path = path.strip()
+        if os.path.isfile(path) and is_supported_format(path):
+            self.set_input_file(path)
+            event.stop()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         if event.input.id == "input-path" and event.value:
