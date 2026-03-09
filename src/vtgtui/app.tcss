@@ -32,13 +32,12 @@ Screen {
 }
 
 #scrubber {
-    height: 3;
+    height: 5;
     margin: 0 0 1 0;
 }
 
 #scrubber:focus {
     border: solid $accent;
-    height: 5;
 }
 
 #frame-preview {

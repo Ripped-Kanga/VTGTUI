@@ -5,8 +5,10 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from urllib.parse import unquote
 
 from textual import on, work
+from textual.events import Paste
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, VerticalScroll
@@ -170,10 +172,14 @@ class CustomQualityScreen(ModalScreen[QualityPreset | None]):
 
 
 class _VideoTree(DirectoryTree):
-    """DirectoryTree that only shows directories and supported video files."""
+    """DirectoryTree that only shows non-hidden directories and supported video files."""
 
     def filter_paths(self, paths):
-        return [p for p in paths if p.is_dir() or is_supported_format(p)]
+        return [
+            p for p in paths
+            if not p.name.startswith(".")
+            and (p.is_dir() or is_supported_format(p))
+        ]
 
 
 class FileBrowserScreen(ModalScreen):
@@ -302,7 +308,7 @@ class VTGApp(App):
             with Horizontal(classes="field-row"):
                 yield Label("Input:", classes="field-label")
                 yield Input(
-                    placeholder="Path to video file...",
+                    placeholder="Path to video file (or drag and drop here)...",
                     id="input-path",
                     classes="field-input",
                 )
@@ -358,7 +364,9 @@ class VTGApp(App):
 
     def on_mount(self) -> None:
         self.query_one("#progress-bar", ProgressBar).update(progress=0)
-        self.log_message("[dim]Ready. Enter a path or browse to select a video file.[/]")
+        self.log_message(
+            "[dim]Ready. Enter a path, browse, or drag and drop a video file onto this window.[/]"
+        )
         formats = ", ".join(sorted(SUPPORTED_EXTENSIONS))
         self.log_message(f"[dim]Supported formats: {formats}[/]")
 
@@ -457,6 +465,28 @@ class VTGApp(App):
         except Exception as e:
             self.log_message(f"[red]Failed to probe video:[/] {e}")
 
+    def on_paste(self, event: Paste) -> None:
+        """Handle file drag-and-drop: terminals paste the file path on drop."""
+        text = event.text.strip()
+        if not text:
+            return
+
+        # Strip file:// URI prefix (Nautilus, Dolphin, etc.)
+        if text.startswith("file://"):
+            text = unquote(text[7:])
+
+        # Take the first line only — some terminals paste with a trailing newline
+        path = text.splitlines()[0].strip().strip("'\"")
+
+        if not path or not os.path.isfile(path):
+            return  # Plain text paste — ignore silently
+
+        if is_supported_format(path):
+            self.set_input_file(path)
+        else:
+            suffix = Path(path).suffix or "(none)"
+            self.log_message(f"[red]Unsupported format:[/] {suffix}")
+
     def on_input_submitted(self, event: Input.Submitted) -> None:
         if event.input.id == "input-path" and event.value:
             path = event.value.strip().strip("'\"")
@@ -525,7 +555,12 @@ class VTGApp(App):
             self._update_spec_panels()
 
         if event.input.id == "input-path" and event.value:
-            path = event.value.strip().strip("'\"")
+            raw = event.value.strip()
+            # Resolve file:// URIs — terminals paste these on drag-and-drop
+            if raw.startswith("file://"):
+                path = unquote(raw[7:]).splitlines()[0].strip()
+            else:
+                path = raw.strip("'\"")
             if os.path.isfile(path) and is_supported_format(path):
                 self.set_input_file(path)
 

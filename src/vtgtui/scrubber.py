@@ -184,7 +184,6 @@ class TimelineScrubber(Widget, can_focus=True):
                 self._move_handle("end", self._x_to_time(x))
 
         self.capture_mouse()
-        self.focus()
         event.stop()
 
     def _on_mouse_move(self, event: MouseMove) -> None:
