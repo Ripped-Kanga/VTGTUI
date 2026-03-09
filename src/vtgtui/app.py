@@ -5,9 +5,10 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import unquote
 
 from textual import on, work
+from textual.events import Paste
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, VerticalScroll
@@ -464,22 +465,27 @@ class VTGApp(App):
         except Exception as e:
             self.log_message(f"[red]Failed to probe video:[/] {e}")
 
-    def on_paste(self, event) -> None:
+    def on_paste(self, event: Paste) -> None:
         """Handle file drag-and-drop: terminals paste the file path on drop."""
         text = event.text.strip()
         if not text:
             return
 
-        # Resolve file:// URIs (common from file managers like Nautilus, Dolphin)
+        # Strip file:// URI prefix (Nautilus, Dolphin, etc.)
         if text.startswith("file://"):
-            path = unquote(urlparse(text).path)
-        else:
-            path = text.strip("'\"")
+            text = unquote(text[7:])
 
-        path = path.strip()
-        if os.path.isfile(path) and is_supported_format(path):
+        # Take the first line only — some terminals paste with a trailing newline
+        path = text.splitlines()[0].strip().strip("'\"")
+
+        if not path or not os.path.isfile(path):
+            return  # Plain text paste — ignore silently
+
+        if is_supported_format(path):
             self.set_input_file(path)
-            event.stop()
+        else:
+            suffix = Path(path).suffix or "(none)"
+            self.log_message(f"[red]Unsupported format:[/] {suffix}")
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         if event.input.id == "input-path" and event.value:
