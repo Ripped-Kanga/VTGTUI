@@ -11,7 +11,7 @@ from textual import on, work
 from textual.events import Paste
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, VerticalScroll
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import (
     Button,
@@ -290,6 +290,7 @@ class VTGApp(App):
         Binding("q", "quit", "Quit", show=True),
         Binding("ctrl+o", "focus_input", "Open", show=True),
         Binding("ctrl+b", "browse", "Browse", show=True),
+        Binding("ctrl+l", "toggle_log", "Log", show=True),
         Binding("escape", "cancel", "Cancel", show=True),
     ]
 
@@ -304,71 +305,80 @@ class VTGApp(App):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        with VerticalScroll(id="main-container"):
-            with Horizontal(classes="field-row"):
-                yield Label("Input:", classes="field-label")
-                yield Input(
-                    placeholder="Path to video file (or drag and drop here)...",
-                    id="input-path",
-                    classes="field-input",
-                )
-                yield Button("Browse", variant="primary", id="browse-btn", classes="browse-btn")
+        with VerticalScroll(id="app-body"):
+            with Vertical(id="main-container"):
+                with Horizontal(classes="field-row"):
+                    yield Label("Input:", classes="field-label")
+                    yield Input(
+                        placeholder="Path to video file (or drag and drop here)...",
+                        id="input-path",
+                        classes="field-input",
+                    )
+                    yield Button("Browse", variant="primary", id="browse-btn", classes="browse-btn")
 
-            with Horizontal(classes="field-row"):
-                yield Label("Output:", classes="field-label")
-                yield Input(
-                    placeholder="Output GIF path (auto-generated if empty)",
-                    id="output-path",
-                    classes="field-input",
-                )
+                with Horizontal(classes="field-row"):
+                    yield Label("Output:", classes="field-label")
+                    yield Input(
+                        placeholder="Output GIF path (auto-generated if empty)",
+                        id="output-path",
+                        classes="field-input",
+                    )
 
-            with Horizontal(classes="field-row"):
-                yield Label("Start:", classes="field-label")
-                yield Input(
-                    placeholder="Start time in seconds (e.g. 0.0)",
-                    id="trim-start",
-                    classes="field-input",
-                )
+                with Horizontal(classes="field-row"):
+                    yield Label("Start:", classes="field-label")
+                    yield Input(
+                        placeholder="Start time in seconds (e.g. 0.0)",
+                        id="trim-start",
+                        classes="field-input",
+                    )
 
-            with Horizontal(classes="field-row"):
-                yield Label("End:", classes="field-label")
-                yield Input(
-                    placeholder="End time in seconds (leave empty for full)",
-                    id="trim-end",
-                    classes="field-input",
-                )
+                with Horizontal(classes="field-row"):
+                    yield Label("End:", classes="field-label")
+                    yield Input(
+                        placeholder="End time in seconds (leave empty for full)",
+                        id="trim-end",
+                        classes="field-input",
+                    )
 
-            yield TimelineScrubber(id="scrubber")
-            yield FramePreview(id="frame-preview")
-
-            with Horizontal(id="quality-row"):
-                yield Label("Quality:", id="quality-label")
-                yield Select(
-                    [(p.name, key) for key, p in QUALITY_PRESETS.items()]
-                    + [("Custom", "custom")],
-                    value="high",
-                    id="quality-select",
-                    allow_blank=False,
-                )
-
-            with Horizontal(id="spec-panels"):
-                yield Static("", id="input-specs")
-                yield Static("", id="output-specs")
-
-            yield Button("Convert", variant="primary", id="convert-btn")
-
-            yield ProgressBar(total=100, show_eta=False, id="progress-bar")
+                with Horizontal(id="quality-row"):
+                    yield Label("Quality:", id="quality-label")
+                    yield Select(
+                        [(p.name, key) for key, p in QUALITY_PRESETS.items()]
+                        + [("Custom", "custom")],
+                        value="high",
+                        id="quality-select",
+                        allow_blank=False,
+                    )
 
             yield RichLog(highlight=True, markup=True, id="log")
+
+        with Horizontal(id="bottom-panel"):
+            with Vertical(id="preview-panel"):
+                yield FramePreview(id="frame-preview")
+            with Vertical(id="side-panel"):
+                yield TimelineScrubber(id="scrubber")
+                yield Label("Controls", classes="section-label")
+                with Horizontal(id="action-buttons"):
+                    yield Button("+ Expand", id="expand-btn")
+                    yield Button("Convert", variant="primary", id="convert-btn")
+                yield Label("Conversion Progress", classes="section-label")
+                yield ProgressBar(total=100, show_eta=False, id="progress-bar")
+                yield Label("Input/Output Specifications", classes="section-label")
+                with Horizontal(id="spec-panels"):
+                    yield Static("", id="input-specs")
+                    yield Static("", id="output-specs")
         yield Footer()
 
     def on_mount(self) -> None:
         self.query_one("#progress-bar", ProgressBar).update(progress=0)
+        self.query_one("#log", RichLog).display = False
         self.log_message(
             "[dim]Ready. Enter a path, browse, or drag and drop a video file onto this window.[/]"
         )
         formats = ", ".join(sorted(SUPPORTED_EXTENSIONS))
         self.log_message(f"[dim]Supported formats: {formats}[/]")
+        if not FramePreview.supports_preview:
+            self.query_one("#expand-btn").display = False
 
     def _get_active_preset(self) -> QualityPreset:
         """Return the currently selected quality preset."""
@@ -569,9 +579,26 @@ class VTGApp(App):
             self.action_convert()
         elif event.button.id == "browse-btn":
             self.action_browse()
+        elif event.button.id == "expand-btn":
+            self._toggle_preview_expand()
 
     def action_focus_input(self) -> None:
         self.query_one("#input-path", Input).focus()
+
+    def action_toggle_log(self) -> None:
+        log = self.query_one("#log", RichLog)
+        log.display = not log.display
+
+    def _toggle_preview_expand(self) -> None:
+        """Toggle the bottom panel between normal and expanded height."""
+        panel = self.query_one("#bottom-panel")
+        btn = self.query_one("#expand-btn", Button)
+        if "expanded" in panel.classes:
+            panel.remove_class("expanded")
+            btn.label = "+ Expand"
+        else:
+            panel.add_class("expanded")
+            btn.label = "- Collapse"
 
     def action_browse(self) -> None:
         """Open a file browser dialog."""

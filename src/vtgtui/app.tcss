@@ -2,7 +2,12 @@ Screen {
     background: $surface;
 }
 
+#app-body {
+    height: 1fr;
+}
+
 #main-container {
+    height: auto;
     padding: 1 2;
 }
 
@@ -31,21 +36,77 @@ Screen {
     text-style: bold;
 }
 
+#bottom-panel {
+    height: 28;
+    margin: 0 2 1 2;
+}
+
+#bottom-panel.expanded {
+    height: 48;
+}
+
+#preview-panel {
+    width: 1fr;
+    height: 100%;
+}
+
+#frame-preview {
+    width: 100%;
+    height: 100%;
+    border: solid $panel;
+    content-align: center middle;
+}
+
+#side-panel {
+    width: 1fr;
+    height: 100%;
+    padding-left: 1;
+}
+
 #scrubber {
     height: 5;
-    margin: 0 0 1 0;
+    margin-bottom: 1;
 }
 
 #scrubber:focus {
     border: solid $accent;
 }
 
-#frame-preview {
-    height: 1fr;
-    min-height: 6;
+.section-label {
+    height: 1;
+    color: $text-muted;
+    text-style: bold;
+}
+
+#action-buttons {
+    height: 3;
+    margin-top: 1;
     margin-bottom: 1;
+}
+
+#action-buttons Button {
+    width: 1fr;
+}
+
+#action-buttons #expand-btn {
+    margin-right: 1;
+}
+
+#progress-bar {
+    width: 100%;
+    margin-bottom: 1;
+    color: $text;
+}
+
+#spec-panels {
+    height: 1fr;
+    layout: horizontal;
+}
+
+#log {
+    height: 10;
+    margin: 0 2 1 2;
     border: solid $panel;
-    content-align: center middle;
 }
 
 #quality-row {
@@ -66,12 +127,6 @@ Screen {
     width: 1fr;
 }
 
-#spec-panels {
-    height: auto;
-    margin-bottom: 1;
-    layout: horizontal;
-}
-
 #input-specs {
     width: 1fr;
     height: auto;
@@ -87,18 +142,6 @@ Screen {
     min-height: 5;
     border: solid $success;
     padding: 0 1;
-}
-
-#convert-btn {
-    width: 100%;
-    margin-top: 1;
-    margin-bottom: 1;
-}
-
-#progress-bar {
-    width: 100%;
-    margin: 1 0;
-    color: $text;
 }
 
 #progress-bar Bar {
@@ -117,11 +160,4 @@ Screen {
 #progress-bar PercentageStatus {
     text-style: bold;
     color: $text;
-}
-
-#log {
-    height: auto;
-    max-height: 8;
-    min-height: 4;
-    border: solid $panel;
 }
